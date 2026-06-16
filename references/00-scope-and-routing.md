@@ -66,12 +66,22 @@
 确认：
 
 - 样本口径：申请、通过、放款、成熟、拒绝或混合。
+- 分析颗粒度：客户级、申请级、借据级、支用级或客户-时间窗。
 - 目标字段和正样本定义。
 - 坏样本定义，例如 DPD30+ MOB3。
 - 是否剔除未成熟样本。
 - 日期字段和观察窗口。
 
 如果用户要求表现指标，但成熟样本定义缺失，停止并询问。
+
+如果分析颗粒度缺失，停止并询问。不得默认使用 `sample_id` 作为样本单位。
+
+循环贷常见情况：
+
+- 0/1 标签可能在借据级或支用级生成。
+- 同一客户可能有多个借据或多次支用。
+- 贷前特征通常是客户级。
+- 若需要输出人维度指标，必须确认从借据/支用级到客户级的聚合规则，例如 `max(Y_label)`、任一借据逾期即客户逾期、最近一笔借据、首笔借据或按观察窗聚合。
 
 ### Step 4：金额契约
 
@@ -111,13 +121,13 @@ amount_bad_rate = sum(overdue_unpaid_principal) / sum(drawdown_amount)
 
 | 主任务 | 必需 reference | 阻塞输入 |
 |---|---|---|
-| `score_cutoff` | `references/strategy/01-score-cutoff.md` | 分数字段、分数方向、标签、成熟样本 |
-| `rule_mining` | `references/rules/01-rule-mining.md` | 特征字段、标签、样本口径、保护列 |
-| `rule_backtest` | `references/rules/02-rule-backtest.md` | 规则配置或拒绝码，若为级联则需要规则顺序 |
-| `rule_funnel` | `references/rules/03-rule-funnel.md` | 有序规则或有序拒绝码 |
-| `strategy_simulation` | `references/strategy/02-strategy-simulation.md` | 候选规则/截断点、样本口径、标签 |
-| `swap_analysis` | `references/strategy/03-swap-analysis.md` | 旧策略结果、新策略结果、成熟样本 |
-| `monitoring` | `references/monitoring/01-psi-monitoring.md` | 基准窗口、对比窗口、监控字段 |
+| `score_cutoff` | `references/strategy/01-score-cutoff.md` | 分数字段、分数方向、分析颗粒度、标签、成熟样本 |
+| `rule_mining` | `references/rules/01-rule-mining.md` | 特征字段、分析颗粒度、标签、样本口径、保护列 |
+| `rule_backtest` | `references/rules/02-rule-backtest.md` | 分析颗粒度、规则配置或拒绝码，若为级联则需要规则顺序 |
+| `rule_funnel` | `references/rules/03-rule-funnel.md` | 分析颗粒度、有序规则或有序拒绝码 |
+| `strategy_simulation` | `references/strategy/02-strategy-simulation.md` | 候选规则/截断点、分析颗粒度、样本口径、标签 |
+| `swap_analysis` | `references/strategy/03-swap-analysis.md` | 旧策略结果、新策略结果、分析颗粒度、成熟样本 |
+| `monitoring` | `references/monitoring/01-psi-monitoring.md` | 分析颗粒度、基准窗口、对比窗口、监控字段 |
 | `reporting` | `references/reporting/01-html-report.md` | 已完成分析输出和已确认业务定义 |
 
 如果必需 reference 文件缺失，必须先写该 reference，再实现对应脚本。
@@ -128,6 +138,8 @@ amount_bad_rate = sum(overdue_unpaid_principal) / sum(drawdown_amount)
 
 - 产品形态、还款方式或应用场景缺失。
 - 任务类型不清楚。
+- 分析颗粒度缺失。
+- 标签颗粒度、特征颗粒度和输出颗粒度不一致，但聚合规则缺失。
 - 用户要求表现指标，但标签或成熟样本定义缺失。
 - 用户要求金额指标，但分子或分母缺失。
 - 用户要求 Swap，但旧策略或新策略结果缺失。
@@ -142,7 +154,8 @@ amount_bad_rate = sum(overdue_unpaid_principal) / sum(drawdown_amount)
 以下保护列默认不得作为规则挖掘特征：
 
 ```text
-sample_id, sample_date, Y_label,
+sample_id, customer_id, application_id, loan_id, drawdown_id,
+sample_date, Y_label,
 drawdown_amount, overdue_unpaid_principal, outstanding_principal, due_principal,
 old_approval_flag, new_approval_flag,
 old_reject_code, new_reject_code,
@@ -168,6 +181,17 @@ product_form:
 repayment_type:
 scenario:
 sample_scope:
+analysis_grain:
+  grain:
+  id_cols:
+  customer_id_col:
+  application_id_col:
+  loan_id_col:
+  drawdown_id_col:
+  label_grain:
+  feature_grain:
+  output_grain:
+  aggregation_rule:
 label:
   target_col:
   positive_class:
@@ -178,7 +202,7 @@ amount_metric:
   denominator:
   formula:
 columns:
-  id_col:
+  id_cols:
   date_col:
   score_col:
   route_col:
@@ -201,4 +225,3 @@ output:
 - 如果包含金额指标，金额公式明确。
 - 如果包含表现指标，成熟样本过滤明确。
 - 输出目录明确。
-

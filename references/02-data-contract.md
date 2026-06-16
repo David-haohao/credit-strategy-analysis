@@ -13,12 +13,13 @@
 
 ## 2. 契约层级
 
-完整输入契约由六层组成：
+完整输入契约由七层组成：
 
 | 层级 | 作用 | 是否必需 |
 |---|---|---|
 | 任务上下文 | 产品、还款方式、场景、任务类型 | 必需 |
 | 样本口径 | 样本范围、时间字段、时间窗口、是否成熟 | 必需 |
+| 分析颗粒度 | 客户级、申请级、借据级、支用级、客户-时间窗及聚合规则 | 必需 |
 | 标签口径 | 目标字段、正样本、坏样本定义、成熟窗口 | 涉及表现指标时必需 |
 | 金额口径 | 金额分子、分母、公式、过滤条件 | 涉及金额指标时必需 |
 | 字段映射 | ID、日期、分数、路由、新旧策略结果等字段 | 按任务必需 |
@@ -48,7 +49,38 @@
 
 表现类指标默认不允许混入未成熟样本。若用户要求包含未成熟样本，报告必须标注偏差风险。
 
-## 5. 标签口径
+## 5. 分析颗粒度
+
+分析颗粒度决定 `sample_cnt`、通过率、拒绝率、规则命中率和坏账率等指标的分母。不得默认把 `sample_id` 当作唯一分析单位。
+
+| 字段 | 说明 | 示例 |
+|---|---|---|
+| `grain` | 当前分析单位 | `customer`、`application`、`loan`、`drawdown`、`customer_window` |
+| `id_cols` | 与分析单位一致的唯一标识字段，允许多列组合 | `customer_id`、`loan_id`、`customer_id + observation_month` |
+| `customer_id_col` | 客户 ID 字段 | `customer_id` |
+| `application_id_col` | 申请 ID 字段 | `application_id` |
+| `loan_id_col` | 借据 ID 字段 | `loan_id` |
+| `drawdown_id_col` | 支用 ID 字段 | `drawdown_id` |
+| `label_grain` | 标签所在颗粒度 | `loan`、`drawdown` |
+| `feature_grain` | 特征所在颗粒度 | `customer` |
+| `output_grain` | 报告输出颗粒度 | `customer` |
+| `aggregation_rule` | 跨颗粒度聚合规则 | `any_bad_to_customer`、`latest_loan` |
+
+循环贷场景尤其需要确认颗粒度：0/1 标签可能基于借据或支用，一个客户可能有多个借据或多次支用；贷前特征通常是人维度。若输出人维度指标，必须先确认如何从借据或支用聚合到客户。
+
+常见聚合规则包括：
+
+| 聚合规则 | 含义 |
+|---|---|
+| `any_bad_to_customer` | 任一借据或支用坏，则客户为坏 |
+| `max_label` | 取同一客户下标签最大值 |
+| `latest_loan` | 取最新借据标签 |
+| `first_loan` | 取首笔借据标签 |
+| `window_aggregation` | 在确认的时间窗内聚合 |
+
+若分析颗粒度缺失，必须停止并询问。若标签、特征和输出颗粒度不一致，但聚合规则缺失，也必须停止。
+
+## 6. 标签口径
 
 | 字段 | 说明 | 示例 |
 |---|---|---|
@@ -64,7 +96,7 @@
 2. 正样本必须显式定义。
 3. 不能把未知、未成熟、拒绝无表现样本当作真实好坏样本。
 
-## 6. 金额口径
+## 7. 金额口径
 
 金额字段必须明确分子和分母。
 
@@ -92,17 +124,28 @@ amount_bad_rate = sum(overdue_unpaid_principal) / sum(drawdown_amount)
 
 不得从单一 `amount` 字段直接计算金额维度逾期率。若源数据只有 `amount`，必须让用户确认它代表支用金额、放款金额、余额还是到期应还本金，并映射到明确字段。
 
-## 7. 字段映射
+## 8. 字段映射
 
-### 7.1 基础字段
+### 8.1 基础字段
 
 | 字段 | 是否必需 | 说明 |
 |---|---|---|
-| `id_col` | 必需 | 样本唯一标识 |
+| `id_cols` | 必需 | 与分析颗粒度一致的唯一标识字段，允许多列组合 |
 | `date_col` | 必需 | 申请、支用、放款或观测时间 |
 | `target_col` | 表现指标必需 | 标签字段 |
 
-### 7.2 分数任务字段
+### 8.2 ID 字段
+
+| 字段 | 何时必需 | 说明 |
+|---|---|---|
+| `customer_id_col` | 客户级、人维聚合或贷前特征分析 | 客户唯一标识 |
+| `application_id_col` | 申请级分析 | 申请唯一标识 |
+| `loan_id_col` | 借据级标签或借据级输出 | 借据唯一标识 |
+| `drawdown_id_col` | 支用级标签或支用级输出 | 支用唯一标识 |
+
+`sample_id` 只作为可选字段。若脚本需要统一分析 ID，应根据用户确认的 `id_cols` 生成 `analysis_unit_id`，并写入 manifest。
+
+### 8.3 分数任务字段
 
 | 字段 | 何时必需 | 说明 |
 |---|---|---|
@@ -110,7 +153,7 @@ amount_bad_rate = sum(overdue_unpaid_principal) / sum(drawdown_amount)
 | `score_direction` | 分数任务 | `high_score_high_risk` 或 `high_score_low_risk` |
 | `score_missing_policy` | 分数任务 | `exclude`、`separate_bin`、`impute` |
 
-### 7.3 新旧策略字段
+### 8.4 新旧策略字段
 
 | 字段 | 何时必需 | 说明 |
 |---|---|---|
@@ -120,7 +163,7 @@ amount_bad_rate = sum(overdue_unpaid_principal) / sum(drawdown_amount)
 | `new_reject_code_col` | Swap | 新策略拒绝码或模拟结果 |
 | `route_col` | 分路由分析 | 渠道、产品、地区、客群或分数段 |
 
-## 8. 特征策略
+## 9. 特征策略
 
 规则挖掘必须明确候选特征和排除规则。
 
@@ -135,44 +178,47 @@ amount_bad_rate = sum(overdue_unpaid_principal) / sum(drawdown_amount)
 默认保护列：
 
 ```text
-sample_id, sample_date, Y_label,
+sample_id, customer_id, application_id, loan_id, drawdown_id,
+sample_date, Y_label,
 drawdown_amount, overdue_unpaid_principal, outstanding_principal, due_principal,
 old_approval_flag, new_approval_flag,
 old_reject_code, new_reject_code,
 mature_flag, mob, dpd_max
 ```
 
-## 9. 按任务的字段要求
+## 10. 按任务的字段要求
 
 | 任务 | 必需契约 |
 |---|---|
-| `rule_mining` | 任务上下文、样本口径、标签口径、特征策略 |
-| `rule_backtest` | 任务上下文、样本口径、规则配置或拒绝码字段 |
-| `rule_funnel` | 任务上下文、样本口径、有序规则或有序拒绝码 |
-| `score_cutoff` | 任务上下文、样本口径、标签口径、分数字段与方向 |
-| `strategy_simulation` | 任务上下文、样本口径、标签口径、候选规则或截断点 |
-| `swap_analysis` | 任务上下文、样本口径、标签口径、旧策略结果、新策略结果 |
-| `monitoring` | 任务上下文、监控字段、基准窗口、对比窗口 |
+| `rule_mining` | 任务上下文、样本口径、分析颗粒度、标签口径、特征策略 |
+| `rule_backtest` | 任务上下文、样本口径、分析颗粒度、规则配置或拒绝码字段 |
+| `rule_funnel` | 任务上下文、样本口径、分析颗粒度、有序规则或有序拒绝码 |
+| `score_cutoff` | 任务上下文、样本口径、分析颗粒度、标签口径、分数字段与方向 |
+| `strategy_simulation` | 任务上下文、样本口径、分析颗粒度、标签口径、候选规则或截断点 |
+| `swap_analysis` | 任务上下文、样本口径、分析颗粒度、标签口径、旧策略结果、新策略结果 |
+| `monitoring` | 任务上下文、分析颗粒度、监控字段、基准窗口、对比窗口 |
 | `reporting` | 已完成分析输出、任务上下文、指标口径 |
 
-## 10. 校验规则
+## 11. 校验规则
 
 执行脚本前必须校验：
 
 1. 必需字段存在于输入数据。
-2. `target_col` 可转换为二分类。
-3. `positive_class` 存在于标签字段中。
-4. 表现指标已定义成熟样本过滤。
-5. 金额指标已定义分子、分母和过滤条件。
-6. 保护列不在候选特征中，除非用户明确批准。
-7. 分数字段缺失处理策略已确认。
-8. Swap 任务同时有旧策略和新策略结果。
-9. 日期字段可解析为日期。
-10. 输出目录明确。
+2. 分析颗粒度已确认，`id_cols` 能唯一标识该颗粒度。
+3. 标签颗粒度、特征颗粒度和输出颗粒度不一致时，聚合规则已确认。
+4. `target_col` 可转换为二分类。
+5. `positive_class` 存在于标签字段中。
+6. 表现指标已定义成熟样本过滤。
+7. 金额指标已定义分子、分母和过滤条件。
+8. 保护列不在候选特征中，除非用户明确批准。
+9. 分数字段缺失处理策略已确认。
+10. Swap 任务同时有旧策略和新策略结果。
+11. 日期字段可解析为日期。
+12. 输出目录明确。
 
 任何校验失败都应停止，并给出缺失字段或缺失口径清单。
 
-## 11. 输出到 manifest
+## 12. 输出到 manifest
 
 每次运行必须把最终确认的契约写入 `run_manifest.json`，至少包含：
 
@@ -182,6 +228,17 @@ product_form:
 repayment_type:
 scenario:
 sample_scope:
+analysis_grain:
+  grain:
+  id_cols:
+  customer_id_col:
+  application_id_col:
+  loan_id_col:
+  drawdown_id_col:
+  label_grain:
+  feature_grain:
+  output_grain:
+  aggregation_rule:
 label:
   target_col:
   positive_class:
@@ -193,7 +250,7 @@ amount_metric:
   formula:
   filter:
 columns:
-  id_col:
+  id_cols:
   date_col:
   score_col:
   score_direction:
@@ -212,4 +269,3 @@ output:
   directory:
   files:
 ```
-

@@ -40,11 +40,23 @@ amount_bad_rate = sum(overdue_unpaid_principal) / sum(drawdown_amount)
 
 ---
 
-## 2. 样本量与通过拒绝指标
+## 2. 样本量、颗粒度与通过拒绝指标
+
+所有样本量和比率指标必须先确认分析颗粒度，不得默认按 `sample_id` 计数。
+
+| 分析颗粒度 | 样本量分母 |
+|---|---|
+| `customer` | 去重客户数 |
+| `application` | 去重申请数 |
+| `loan` | 去重借据数 |
+| `drawdown` | 去重支用数 |
+| `customer_window` | 去重客户-时间窗数 |
+
+循环贷场景中，0/1 标签可能是借据或支用颗粒度，贷前特征通常是客户颗粒度。若报告输出客户级指标，必须先按用户确认的规则将借据或支用标签聚合到客户级。
 
 | 指标 | 公式 | 含义 |
 |---|---|---|
-| `sample_cnt` | `count(sample_id)` | 当前分析样本数 |
+| `sample_cnt` | `count_distinct(analysis_unit_id)` | 当前确认颗粒度下的分析单位数 |
 | `pass_cnt` | `sum(approval_flag == 1)` | 通过样本数 |
 | `reject_cnt` | `sum(approval_flag == 0)` | 拒绝样本数 |
 | `approval_rate` | `pass_cnt / sample_cnt` | 通过率 |
@@ -55,11 +67,15 @@ amount_bad_rate = sum(overdue_unpaid_principal) / sum(drawdown_amount)
 说明：
 
 1. `approval_flag` 可以来自旧策略结果，也可以来自离线模拟结果。
-2. 若样本口径不是申请样本，必须在报告中说明通过率分母，例如“放款样本内通过率”通常没有业务意义。
+2. `analysis_unit_id` 应由用户确认的 `id_cols` 生成；如果 `id_cols` 本身为单列，也应在 manifest 中记录。
+3. 若借据或支用标签聚合到客户级，`sample_cnt` 统计去重客户数，不统计借据数或支用数。
+4. 若样本口径不是申请样本，必须在报告中说明通过率分母，例如“放款样本内通过率”通常没有业务意义。
 
 ---
 
-## 3. 人维度表现指标
+## 3. 表现指标
+
+表现指标按用户确认的分析颗粒度计算。若输出颗粒度为客户级，但标签来自借据级或支用级，必须先完成标签聚合。
 
 | 指标 | 公式 | 适用样本 |
 |---|---|---|
@@ -131,6 +147,7 @@ pass_by_rule = 1 - hit
 1. `lift > 1` 表示命中样本坏账率高于整体，但不能单独作为规则有效性的判断标准。
 2. 高 Lift 可能来自极小样本，必须同时看 `hit_cnt`、`hit_rate` 和 `bad_capture`。
 3. 规则推荐排序必须至少同时输出 `hit_rate`、`bad_rate`、`passed_bad_rate`、`lift`、`bad_capture`。
+4. 所有命中数和命中率必须说明分析颗粒度；客户级命中率、借据级命中率和支用级命中率不可直接混用。
 
 ---
 
@@ -152,6 +169,7 @@ pass_by_rule = 1 - hit
 1. `remaining_after_cnt_i` 必须等于下一条规则的 `remaining_before_cnt`。
 2. `cumulative_reject_cnt` 必须单调不降。
 3. 级联漏斗指标与单规则独立命中指标不能混用。
+4. 漏斗全程必须使用同一分析颗粒度；若前后颗粒度变化，必须先生成新的分析单位并重新计算漏斗。
 
 ---
 
@@ -332,4 +350,3 @@ PSI = sum((actual_i - expected_i) * ln(actual_i / expected_i))
 5. 分子和分母。
 6. 是否为直接观测或估计。
 7. 分母为 0 或样本量过小的处理方式。
-

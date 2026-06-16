@@ -20,6 +20,18 @@ sample_scope:
   include_immature: false
   filters: []
 
+analysis_grain:
+  grain: null                     # customer | application | loan | drawdown | customer_window
+  id_cols: []                     # 与 grain 一致的唯一标识字段，允许多列组合
+  customer_id_col: null
+  application_id_col: null
+  loan_id_col: null
+  drawdown_id_col: null
+  label_grain: null               # customer | application | loan | drawdown | customer_window
+  feature_grain: null             # customer | application | loan | drawdown | customer_window
+  output_grain: null              # customer | application | loan | drawdown | customer_window
+  aggregation_rule: null          # any_bad_to_customer | max_label | latest_loan | first_loan | window_aggregation | custom
+
 label:
   target_col: Y_label
   positive_class: 1
@@ -35,7 +47,11 @@ amount_metric:
   filter: null                    # 例如 approved == 1 and mature_flag == 1
 
 columns:
-  id_col: sample_id
+  id_cols: []
+  customer_id_col: null
+  application_id_col: null
+  loan_id_col: null
+  drawdown_id_col: null
   date_col: sample_date
   target_col: Y_label
   score_col: null
@@ -59,6 +75,10 @@ feature_policy:
   exclude_features: []
   protected_columns:
     - sample_id
+    - customer_id
+    - application_id
+    - loan_id
+    - drawdown_id
     - sample_date
     - Y_label
     - drawdown_amount
@@ -99,6 +119,9 @@ output:
 validation_rules:
   require_task_context: true
   require_sample_scope: true
+  require_analysis_grain: true
+  require_id_cols_for_grain: true
+  require_aggregation_rule_when_grains_differ: true
   require_label_for_performance_metrics: true
   require_maturity_for_performance_metrics: true
   require_amount_definition_for_amount_metrics: true
@@ -107,4 +130,3 @@ validation_rules:
   require_score_direction_for_score_tasks: true
   require_old_and_new_strategy_for_swap: true
   require_route_col_for_routing: true
-

@@ -32,7 +32,7 @@ credit-strategy-analysis
 
 1. 一个入口，一个上下文，不再让用户在多个 skill 之间切换。
 2. 规则挖掘、规则回测、分数截断、策略模拟、Swap 和监控使用同一套数据契约。
-3. 所有任务必须先确认产品、场景、任务类型、样本口径、标签口径和金额口径。
+3. 所有任务必须先确认产品、场景、任务类型、样本口径、分析颗粒度、标签口径和金额口径。
 4. 缺失关键输入时必须停止并询问用户，不得静默使用默认值。
 5. 只输出离线分析材料，不输出生产上线方案。
 
@@ -79,6 +79,7 @@ Q3: 请确认应用场景？
 |---|---|---|
 | 任务类型 | 规则挖掘、规则回测、分数截断、策略模拟、Swap、监控、报告 | 停止并询问 |
 | 样本口径 | 申请样本、通过样本、放款样本、成熟样本、拒绝样本 | 停止并询问 |
+| 分析颗粒度 | 客户级、申请级、借据级、支用级、客户-时间窗；以及对应 ID 字段 | 停止并询问 |
 | 标签口径 | 30+/60+/90+ DPD、MOB 窗口、正负样本定义 | 停止并询问 |
 | 成熟样本口径 | 是否剔除未成熟样本，成熟窗口如何定义 | 涉及表现指标时停止并询问 |
 | 金额口径 | 默认建议为逾期未还本金 / 支用金额，但必须确认 | 涉及金额指标时停止并询问 |
@@ -133,9 +134,29 @@ Q3: 请确认应用场景？
 
 | 字段 | 类型 | 用途 |
 |---|---|---|
-| `sample_id` | str/int | 样本唯一标识 |
+| `id_cols` | list[str] | 与分析颗粒度一致的唯一标识字段，允许多列组合 |
+| `customer_id` | str/int | 客户标识，客户级或跨颗粒度聚合时必需 |
+| `application_id` | str/int | 申请标识，申请级分析时必需 |
+| `loan_id` | str/int | 借据标识，借据级标签或输出时必需 |
+| `drawdown_id` | str/int | 支用标识，支用级标签或输出时必需 |
 | `sample_date` | datetime | 申请、支用、放款或观测时间 |
 | `Y_label` | int, 0/1 | 表现标签，1 表示坏样本 |
+
+`sample_id` 只作为可选字段，不得默认作为唯一分析单位。脚本如需统一 ID，应根据用户确认的 `id_cols` 生成 `analysis_unit_id`，并写入 `run_manifest.json`。
+
+### 6.1.1 分析颗粒度
+
+分析颗粒度决定 `sample_cnt`、通过率、拒绝率、规则命中率和坏账率等指标的分母，必须由用户确认。
+
+| 颗粒度 | 含义 | 常见 ID |
+|---|---|---|
+| `customer` | 客户级 | `customer_id` |
+| `application` | 申请级 | `application_id` |
+| `loan` | 借据级 | `loan_id` |
+| `drawdown` | 支用级 | `drawdown_id` |
+| `customer_window` | 客户-时间窗 | `customer_id + observation_month` |
+
+循环贷场景中，0/1 标签可能基于借据或支用，一个客户可能有多个借据或多次支用；贷前特征通常是人维度。若输出人维度指标，必须确认如何从借据或支用聚合到客户，例如 `any_bad_to_customer`、`max_label`、`latest_loan`、`first_loan` 或时间窗聚合。
 
 ### 6.2 金额字段
 
@@ -183,7 +204,8 @@ amount_bad_rate = sum(overdue_unpaid_principal) / sum(drawdown_amount)
 以下字段默认禁止作为规则挖掘特征：
 
 ```text
-sample_id, sample_date, Y_label,
+sample_id, customer_id, application_id, loan_id, drawdown_id,
+sample_date, Y_label,
 drawdown_amount, overdue_unpaid_principal, outstanding_principal, due_principal,
 old_approval_flag, new_approval_flag,
 old_reject_code, new_reject_code,
@@ -320,7 +342,7 @@ CART 用于发现多条件 AND 组合规则。
 
 1. 样本级输出行数必须等于输入行数。
 2. 拒绝码必须属于配置中的规则集合。
-3. 单规则 `sample_cnt - hit_cnt = pass_cnt`。
+3. 单规则 `sample_cnt - hit_cnt = pass_cnt`，其中 `sample_cnt` 必须基于已确认分析颗粒度。
 4. 级联漏斗下一层进入人数必须等于上一层剩余人数。
 5. 审批结果与拒绝码必须一致：有拒绝码则不通过。
 
@@ -513,7 +535,8 @@ description: Use when analyzing credit risk strategies, rule mining, rule backte
 ### 10.3 入口阻塞规则
 
 ```text
-如果产品、还款方式、场景、任务类型、样本口径、标签口径、金额口径缺失，必须先询问用户。
+如果产品、还款方式、场景、任务类型、样本口径、分析颗粒度、标签口径、金额口径缺失，必须先询问用户。
+如果标签颗粒度、特征颗粒度和输出颗粒度不一致，且缺少聚合规则，也必须先询问用户。
 不得用默认值静默执行。
 不得生成生产上线方案。
 ```
@@ -537,6 +560,17 @@ sample_scope:
   end_date: 2026-03-31
   mature_flag_col: mature_flag
 
+analysis_grain:
+  grain: customer
+  id_cols: [customer_id]
+  customer_id_col: customer_id
+  loan_id_col: loan_id
+  drawdown_id_col: drawdown_id
+  label_grain: loan
+  feature_grain: customer
+  output_grain: customer
+  aggregation_rule: any_bad_to_customer
+
 label:
   target_col: Y_label
   bad_definition: DPD30_plus_MOB3
@@ -548,7 +582,7 @@ amount_metric:
   formula: sum(numerator) / sum(denominator)
 
 columns:
-  id_col: sample_id
+  id_cols: [customer_id]
   score_col: model_score
   route_col: route
   old_approval_col: old_approval_flag
