@@ -1,0 +1,110 @@
+# credit-strategy-analysis 输入契约模板
+# 该文件是配置模板，不是某次任务的真实配置。实际运行时应复制后填入具体字段。
+
+schema_version: "0.1"
+
+task:
+  product_form: null              # revolving | non_revolving | custom
+  product_description: null       # custom 产品必填
+  repayment_type: null            # equal_payment | bullet | custom
+  repayment_description: null     # custom 还款方式必填
+  scenario: null                  # first_loan_admission | reloan | limit | pricing | drawdown | in_life | warning | rule_review | strategy_compare
+  task_type: null                 # rule_mining | rule_backtest | rule_funnel | score_cutoff | strategy_simulation | swap_analysis | monitoring | reporting | metric_definition
+
+sample_scope:
+  population: null                # application | approved | booked | mature_booked | rejected | mixed
+  date_col: sample_date
+  start_date: null                # YYYY-MM-DD
+  end_date: null                  # YYYY-MM-DD
+  mature_flag_col: mature_flag
+  include_immature: false
+  filters: []
+
+label:
+  target_col: Y_label
+  positive_class: 1
+  bad_definition: null            # 例如 DPD30_plus_MOB3
+  maturity_rule: null             # 例如 mature_flag == 1 或 MOB >= 3
+  exclude_values: []              # 例如 [2] 表示剔除未成熟/未知
+
+amount_metric:
+  enabled: false
+  numerator: overdue_unpaid_principal
+  denominator: drawdown_amount
+  formula: sum(numerator) / sum(denominator)
+  filter: null                    # 例如 approved == 1 and mature_flag == 1
+
+columns:
+  id_col: sample_id
+  date_col: sample_date
+  target_col: Y_label
+  score_col: null
+  score_direction: null           # high_score_high_risk | high_score_low_risk
+  score_missing_policy: null      # exclude | separate_bin | impute
+  route_col: null
+  weight_col: null
+  old_approval_col: null
+  old_reject_code_col: null
+  new_approval_col: null
+  new_reject_code_col: null
+
+amount_columns:
+  drawdown_amount: drawdown_amount
+  overdue_unpaid_principal: overdue_unpaid_principal
+  outstanding_principal: outstanding_principal
+  due_principal: due_principal
+
+feature_policy:
+  candidate_features: []          # 空列表表示从非保护列中自动选择
+  exclude_features: []
+  protected_columns:
+    - sample_id
+    - sample_date
+    - Y_label
+    - drawdown_amount
+    - overdue_unpaid_principal
+    - outstanding_principal
+    - due_principal
+    - old_approval_flag
+    - new_approval_flag
+    - old_reject_code
+    - new_reject_code
+    - mature_flag
+    - mob
+    - dpd_max
+  allow_protected_override: false
+  protected_overrides: []
+  protected_override_reason: null
+
+monitoring:
+  baseline_window:
+    start_date: null
+    end_date: null
+  comparison_window:
+    start_date: null
+    end_date: null
+  monitor_fields: []
+
+input:
+  path: null
+  encoding: utf-8
+
+output:
+  directory: null
+  write_detail: true
+  write_summary: true
+  write_manifest: true
+  write_html: false
+
+validation_rules:
+  require_task_context: true
+  require_sample_scope: true
+  require_label_for_performance_metrics: true
+  require_maturity_for_performance_metrics: true
+  require_amount_definition_for_amount_metrics: true
+  forbid_ambiguous_amount_column: true
+  forbid_protected_features_by_default: true
+  require_score_direction_for_score_tasks: true
+  require_old_and_new_strategy_for_swap: true
+  require_route_col_for_routing: true
+
