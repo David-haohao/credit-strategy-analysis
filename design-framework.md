@@ -34,7 +34,8 @@ credit-strategy-analysis
 2. 规则挖掘、规则回测、分数截断、策略模拟、Swap 和监控使用同一套数据契约。
 3. 所有任务必须先确认产品、场景、任务类型、样本口径、分析颗粒度、标签口径和金额口径。
 4. 缺失关键输入时必须停止并询问用户，不得静默使用默认值。
-5. 只输出离线分析材料，不输出生产上线方案。
+5. 读取 input 后可以生成字段映射候选，但候选只用于提问，必须由用户确认后才能运行。
+6. 只输出离线分析材料，不输出生产上线方案。
 
 ---
 
@@ -87,6 +88,8 @@ Q3: 请确认应用场景？
 | 模型分 | 分数字段、分数方向、分数缺失处理 | 分数类任务缺失则停止 |
 | 路由字段 | 渠道、产品、分层、客群或地区 | 分路由任务缺失则停止 |
 
+字段名不要求用户提前按统一契约改好。推荐流程是先读取 input 的列名、类型和样例值，生成候选字段映射，再让用户确认；确认前不得进入脚本执行。
+
 ---
 
 ## 四、产品与场景参考卡片
@@ -130,6 +133,8 @@ Q3: 请确认应用场景？
 
 ## 六、统一数据契约
 
+统一数据契约是语义标准，不是强制原始字段名。它用于让不同脚本、报告和 manifest 使用同一套含义；原始数据读取后可以映射到这些语义字段，但映射必须由用户确认。
+
 ### 6.1 基础字段
 
 | 字段 | 类型 | 用途 |
@@ -156,7 +161,7 @@ Q3: 请确认应用场景？
 | `drawdown` | 支用级 | `drawdown_id` |
 | `customer_window` | 客户-时间窗 | `customer_id + observation_month` |
 
-循环贷场景中，0/1 标签可能基于借据或支用，一个客户可能有多个借据或多次支用；贷前特征通常是人维度。若输出人维度指标，必须确认如何从借据或支用聚合到客户，例如 `any_bad_to_customer`、`max_label`、`latest_loan`、`first_loan` 或时间窗聚合。
+循环贷场景中，0/1 标签可能基于借据或支用，一个客户可能有多个借据或多次支用；贷前特征通常是人维度。这些只是需要追问的常见情况，不得作为默认规则。若输出人维度指标，必须请用户确认如何从借据或支用聚合到客户，例如 `any_bad_to_customer`、`max_label`、`latest_loan`、`first_loan` 或时间窗聚合。
 
 ### 6.2 金额字段
 
@@ -537,6 +542,7 @@ description: Use when analyzing credit risk strategies, rule mining, rule backte
 ```text
 如果产品、还款方式、场景、任务类型、样本口径、分析颗粒度、标签口径、金额口径缺失，必须先询问用户。
 如果标签颗粒度、特征颗粒度和输出颗粒度不一致，且缺少聚合规则，也必须先询问用户。
+如果字段映射只是脚本候选结果，尚未经用户确认，也必须先询问用户。
 不得用默认值静默执行。
 不得生成生产上线方案。
 ```
@@ -570,6 +576,12 @@ analysis_grain:
   feature_grain: customer
   output_grain: customer
   aggregation_rule: any_bad_to_customer
+
+field_mapping:
+  mode: user_confirmed
+  confirmed: true
+  candidate_columns: {}
+  unmapped_required_fields: []
 
 label:
   target_col: Y_label

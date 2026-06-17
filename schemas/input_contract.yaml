@@ -32,6 +32,13 @@ analysis_grain:
   output_grain: null              # customer | application | loan | drawdown | customer_window
   aggregation_rule: null          # any_bad_to_customer | max_label | latest_loan | first_loan | window_aggregation | custom
 
+field_mapping:
+  mode: null                      # user_provided | candidate_then_user_confirmed
+  confirmed: false                # 候选映射必须经用户确认后才能运行
+  candidate_columns: {}           # 读取 input 后生成的候选映射，仅用于提问
+  unmapped_required_fields: []     # 必需但尚未确认映射的语义字段
+  notes: null
+
 label:
   target_col: Y_label
   positive_class: 1
@@ -119,6 +126,7 @@ output:
 validation_rules:
   require_task_context: true
   require_sample_scope: true
+  require_confirmed_field_mapping: true
   require_analysis_grain: true
   require_id_cols_for_grain: true
   require_aggregation_rule_when_grains_differ: true
