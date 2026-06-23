@@ -1,0 +1,12 @@
+<!doctype html>
+<html lang="zh-CN">
+<head><meta charset="utf-8"><title>{{ title }}</title></head>
+<body>
+  <h1>{{ title }}</h1>
+  <p>任务类型：{{ manifest.task.task_type }}</p>
+  <p>分析颗粒度：{{ manifest.analysis_grain.grain }}</p>
+  <p>样本量：{{ manifest.validation.analysis_unit_count }}</p>
+  <h2>口径与限制</h2>
+  <ul>{% for item in caveats %}<li>{{ item }}</li>{% endfor %}</ul>
+</body>
+</html>

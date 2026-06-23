@@ -3,6 +3,9 @@
 
 schema_version: "0.1"
 
+confirmation:
+  receipt_path: null              # 独立 JSON 确认凭证；必须来自用户交互
+
 task:
   product_form: null              # revolving | non_revolving | custom
   product_description: null       # custom 产品必填
@@ -126,6 +129,7 @@ output:
 validation_rules:
   require_task_context: true
   require_sample_scope: true
+  require_confirmation_receipt: true
   require_confirmed_field_mapping: true
   require_analysis_grain: true
   require_id_cols_for_grain: true
