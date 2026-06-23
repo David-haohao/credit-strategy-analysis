@@ -6,11 +6,12 @@
 
 ## 执行顺序
 
-1. 读取 `references/00-scope-and-routing.md` 并向用户确认阻塞口径。
-2. 读取 input 后只生成字段映射候选；不得据此执行。
-3. 将用户确认内容写入独立 JSON 确认凭证。
-4. 运行 `scripts/validate_contract.py`；校验失败时停止并解释缺失项。
-5. 根据已确认任务读取对应 reference 并运行对应脚本。
+1. 读取 `references/00-scope-and-routing.md` 并向用户确认当前任务的阻塞口径。
+2. 按路由只读取任务所需的方法、数据契约和指标章节；不得默认通读全部前置文档。
+3. 读取 input 后只生成字段映射候选；不得据此执行。
+4. 将用户确认内容写入独立 JSON 确认凭证。
+5. 运行 `scripts/validate_contract.py`；校验失败时停止并解释缺失项。
+6. 根据已确认任务运行对应脚本。
 
 ## 不可推断项
 
