@@ -11,60 +11,49 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 EXPECTED_REFERENCES = [
-    "references/00-scope-and-routing.md",
-    "references/01-product-and-scenario.md",
-    "references/02-data-contract.md",
-    "references/03-metric-definitions.md",
-    "references/rules/01-rule-mining.md",
-    "references/rules/02-rule-backtest.md",
-    "references/rules/03-rule-funnel.md",
-    "references/rules/04-rule-combination.md",
-    "references/strategy/01-score-cutoff.md",
-    "references/strategy/02-strategy-simulation.md",
-    "references/strategy/03-swap-analysis.md",
-    "references/strategy/04-routing-strategy.md",
-    "references/monitoring/01-psi-monitoring.md",
-    "references/monitoring/02-rule-drift.md",
-    "references/monitoring/03-performance-drift.md",
-    "references/reporting/01-html-report.md",
+    "references/00-data-product-analysis.md",
+    "references/01-single-rule-mining.md",
+    "references/02-rule-combination.md",
+    "references/03-strategy-evaluation-and-swap.md",
+    "references/04-final-report.md",
 ]
 
 EXPECTED_SCHEMAS = [
     "schemas/confirmation_receipt.schema.json",
-    "schemas/rule_config.schema.json",
-    "schemas/strategy_config.schema.json",
+    "schemas/rule_combination.schema.json",
+    "schemas/strategy_evaluation.schema.json",
     "schemas/report_manifest.schema.json",
 ]
 
 EXPECTED_CLI = [
     "scripts/validate_contract.py",
     "scripts/rule_miner.py",
+    "scripts/rule_combiner.py",
+    "scripts/strategy_evaluator.py",
+    "scripts/final_reporter.py",
+]
+
+RETIRED_PATHS = [
+    "design-framework-v2.md",
+    "references/00-scope-and-routing.md",
+    "references/01-product-and-scenario.md",
+    "references/02-data-contract.md",
+    "references/03-metric-definitions.md",
+    "references/rules",
+    "references/strategy",
+    "references/monitoring",
+    "references/reporting",
     "scripts/rule_backtester.py",
     "scripts/strategy_simulator.py",
     "scripts/score_cutoff_optimizer.py",
     "scripts/swap_analyzer.py",
     "scripts/metric_reporter.py",
     "scripts/monitoring_reporter.py",
+    "schemas/rule_config.schema.json",
+    "schemas/strategy_config.schema.json",
+    "templates/monitoring_report.html.j2",
+    "templates/strategy_report.html.j2",
 ]
-
-CORE_METHOD_REFERENCES = [
-    "references/rules/01-rule-mining.md",
-    "references/rules/02-rule-backtest.md",
-    "references/strategy/01-score-cutoff.md",
-    "references/strategy/02-strategy-simulation.md",
-]
-
-SUPPORTING_METHOD_REFERENCES = [
-    "references/rules/03-rule-funnel.md",
-    "references/rules/04-rule-combination.md",
-    "references/strategy/03-swap-analysis.md",
-    "references/strategy/04-routing-strategy.md",
-    "references/monitoring/01-psi-monitoring.md",
-    "references/monitoring/02-rule-drift.md",
-    "references/monitoring/03-performance-drift.md",
-    "references/reporting/01-html-report.md",
-]
-
 
 class SkillSkeletonTests(unittest.TestCase):
     def test_skill_routes_and_agents_are_present(self):
@@ -92,42 +81,31 @@ class SkillSkeletonTests(unittest.TestCase):
             )
             self.assertEqual(result.returncode, 0, f"{relative_path}: {result.stderr}")
 
-    def test_routing_is_compact_and_requires_on_demand_reading(self):
-        routing = (ROOT / "references/00-scope-and-routing.md").read_text(encoding="utf-8")
+    def test_five_stage_pipeline_is_the_only_entry_route(self):
+        routing = (ROOT / "references/00-data-product-analysis.md").read_text(encoding="utf-8")
         skill = (ROOT / "SKILL.md").read_text(encoding="utf-8")
         agents = (ROOT / "AGENTS.md").read_text(encoding="utf-8")
-        self.assertLessEqual(len(routing.splitlines()), 120)
-        self.assertIn("按需读取", routing)
-        self.assertIn("按路由只读取任务所需", skill)
-        self.assertIn("不得默认通读全部前置文档", agents)
+        self.assertIn("五段", routing)
+        self.assertIn("单规则挖掘", skill)
+        self.assertIn("TopN", skill)
+        self.assertIn("级联拒绝", agents)
+        for retired_path in RETIRED_PATHS:
+            self.assertFalse((ROOT / retired_path).exists(), retired_path)
 
-    def test_core_method_references_have_decision_sections(self):
-        headings = [
-            "## 适用范围与阻断",
-            "## 最小输入与按需引用",
-            "## 方法步骤",
-            "## 候选参数",
-            "## 关键伪代码",
-            "## 输出",
-            "## 验收不变量",
-        ]
-        for relative_path in CORE_METHOD_REFERENCES:
-            content = (ROOT / relative_path).read_text(encoding="utf-8")
-            for heading in headings:
-                self.assertIn(heading, content, f"{relative_path}: {heading}")
+    def test_single_rule_mining_covers_iv_extremes_and_three_feature_cart(self):
+        content = (ROOT / "references/01-single-rule-mining.md").read_text(encoding="utf-8")
+        for term in ("IV", "极端区间", "分位点", "缺失值", "CART", "不超过 3 个特征"):
+            self.assertIn(term, content)
 
-    def test_supporting_method_references_define_execution_and_disclosure(self):
-        headings = ["## 最小输入", "## 计算顺序", "## 输出与披露", "## 验收"]
-        for relative_path in SUPPORTING_METHOD_REFERENCES:
-            content = (ROOT / relative_path).read_text(encoding="utf-8")
-            for heading in headings:
-                self.assertIn(heading, content, f"{relative_path}: {heading}")
+    def test_rule_combination_uses_lift_top_n_and_sequential_reject(self):
+        content = (ROOT / "references/02-rule-combination.md").read_text(encoding="utf-8")
+        for term in ("Lift", "TopN", "降序", "级联", "任一命中即拒绝", "边际"):
+            self.assertIn(term, content)
 
-    def test_metric_dictionary_has_task_reference_index(self):
-        content = (ROOT / "references/03-metric-definitions.md").read_text(encoding="utf-8")
-        self.assertIn("## 任务引用索引", content)
-        for task in ("规则挖掘", "规则回测", "分数截断", "策略模拟", "Swap", "监控"):
-            self.assertIn(task, content)
+    def test_strategy_evaluation_and_swap_disclose_observability(self):
+        content = (ROOT / "references/03-strategy-evaluation-and-swap.md").read_text(encoding="utf-8")
+        for term in ("approval_rate", "pass_bad_rate", "both_pass", "both_reject", "swap_in", "swap_out", "不可观测"):
+            self.assertIn(term, content)
 
 
 if __name__ == "__main__":

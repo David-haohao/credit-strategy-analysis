@@ -15,6 +15,14 @@ class ContractValidationError(ValueError):
     """用户确认不足或输入不满足统一数据契约时抛出。"""
 
 
+SUPPORTED_TASK_TYPES = {
+    "single_rule_mining",
+    "rule_combination",
+    "strategy_evaluation",
+    "final_report",
+}
+
+
 def safe_div(numerator: float | int | None, denominator: float | int | None) -> float | None:
     """安全计算比率；分母为空或为零时返回 None。"""
     if numerator is None or denominator in (None, 0):
@@ -106,6 +114,8 @@ def validate_run_contract(
         ("task_type", "任务类型"),
     ):
         _same_or_error(task[key], receipt.get(key), label)
+    if task["task_type"] not in SUPPORTED_TASK_TYPES:
+        raise ContractValidationError("任务类型不属于五段规则策略框架")
 
     sample_scope = config.get("sample_scope", {})
     _require(sample_scope, "population", "样本口径")
@@ -117,6 +127,23 @@ def validate_run_contract(
         raise ContractValidationError("存在未确认映射的必需字段")
     if receipt.get("field_mapping", {}).get("confirmed") is not True:
         raise ContractValidationError("确认凭证未确认字段映射")
+
+    if task["task_type"] == "rule_combination":
+        combination = config.get("rule_combination", {})
+        receipt_combination = receipt.get("rule_combination", {})
+        top_n = _require(combination, "top_n", "TopN")
+        if not isinstance(top_n, int) or top_n < 1:
+            raise ContractValidationError("TopN 必须为大于零的整数")
+        if combination.get("ranking_metric") != "lift":
+            raise ContractValidationError("规则组合必须按 Lift 排序")
+        if combination.get("execution_mode") != "sequential_reject":
+            raise ContractValidationError("规则组合必须使用级联拒绝语义")
+        for key, label_name in (
+            ("top_n", "TopN"),
+            ("ranking_metric", "Lift 排序"),
+            ("execution_mode", "级联拒绝语义"),
+        ):
+            _same_or_error(combination[key], receipt_combination.get(key), label_name)
 
     grain = config.get("analysis_grain", {})
     grain_name = _require(grain, "grain", "分析颗粒度")

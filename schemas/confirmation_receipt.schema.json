@@ -39,5 +39,24 @@
     },
     "label": {"type": "object"},
     "amount_metric": {"type": "object"}
-  }
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"task_type": {"const": "rule_combination"}}},
+      "then": {
+        "required": ["rule_combination"],
+        "properties": {
+          "rule_combination": {
+            "type": "object",
+            "required": ["top_n", "ranking_metric", "execution_mode"],
+            "properties": {
+              "top_n": {"type": "integer", "minimum": 1},
+              "ranking_metric": {"const": "lift"},
+              "execution_mode": {"const": "sequential_reject"}
+            }
+          }
+        }
+      }
+    }
+  ]
 }

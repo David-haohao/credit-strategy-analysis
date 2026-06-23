@@ -24,7 +24,7 @@ def valid_config():
             "product_form": "revolving",
             "repayment_type": "equal_payment",
             "scenario": "first_loan_admission",
-            "task_type": "strategy_simulation",
+            "task_type": "strategy_evaluation",
         },
         "confirmation": {"receipt_path": "confirmation.json"},
         "sample_scope": {"population": "mature_booked"},
@@ -81,7 +81,7 @@ def valid_receipt():
         "product_form": "revolving",
         "repayment_type": "equal_payment",
         "scenario": "first_loan_admission",
-        "task_type": "strategy_simulation",
+        "task_type": "strategy_evaluation",
         "field_mapping": {"confirmed": True},
         "analysis_grain": {
             "grain": "customer",
@@ -146,6 +146,53 @@ class ContractValidationTests(unittest.TestCase):
         receipt = copy.deepcopy(self.receipt)
         receipt["scenario"] = "reloan"
         self.assert_contract_error(receipt=receipt, text="应用场景")
+
+    def test_rejects_removed_task_type(self):
+        config = copy.deepcopy(self.config)
+        receipt = copy.deepcopy(self.receipt)
+        config["task"]["task_type"] = "score_cutoff"
+        receipt["task_type"] = "score_cutoff"
+        self.assert_contract_error(config=config, receipt=receipt, text="任务类型")
+
+    def test_rule_combination_requires_confirmed_top_n_lift_and_sequential_reject(self):
+        config = copy.deepcopy(self.config)
+        receipt = copy.deepcopy(self.receipt)
+        config["task"]["task_type"] = "rule_combination"
+        receipt["task_type"] = "rule_combination"
+        config["rule_combination"] = {
+            "top_n": None,
+            "ranking_metric": "lift",
+            "execution_mode": "sequential_reject",
+        }
+        receipt["rule_combination"] = copy.deepcopy(config["rule_combination"])
+        self.assert_contract_error(config=config, receipt=receipt, text="TopN")
+
+    def test_rule_combination_rejects_non_lift_ranking(self):
+        config = copy.deepcopy(self.config)
+        receipt = copy.deepcopy(self.receipt)
+        config["task"]["task_type"] = "rule_combination"
+        receipt["task_type"] = "rule_combination"
+        config["rule_combination"] = {
+            "top_n": 3,
+            "ranking_metric": "iv",
+            "execution_mode": "sequential_reject",
+        }
+        receipt["rule_combination"] = copy.deepcopy(config["rule_combination"])
+        self.assert_contract_error(config=config, receipt=receipt, text="Lift")
+
+    def test_valid_rule_combination_contract(self):
+        config = copy.deepcopy(self.config)
+        receipt = copy.deepcopy(self.receipt)
+        config["task"]["task_type"] = "rule_combination"
+        receipt["task_type"] = "rule_combination"
+        config["rule_combination"] = {
+            "top_n": 3,
+            "ranking_metric": "lift",
+            "execution_mode": "sequential_reject",
+        }
+        receipt["rule_combination"] = copy.deepcopy(config["rule_combination"])
+        validated = validate_run_contract(config, receipt, self.data)
+        self.assertEqual(validated["analysis_unit_count"], 2)
 
     def test_rejects_missing_analysis_grain(self):
         config = copy.deepcopy(self.config)

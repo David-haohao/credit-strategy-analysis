@@ -1,0 +1,12 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Lift TopN Sequential Reject Combination",
+  "type": "object",
+  "required": ["top_n", "ranking_metric", "execution_mode"],
+  "properties": {
+    "top_n": {"type": "integer", "minimum": 1},
+    "ranking_metric": {"const": "lift"},
+    "execution_mode": {"const": "sequential_reject"},
+    "tie_break_rule": {"type": ["string", "null"]}
+  }
+}

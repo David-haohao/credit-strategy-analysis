@@ -3,10 +3,11 @@
 <head><meta charset="utf-8"><title>{{ title }}</title></head>
 <body>
   <h1>{{ title }}</h1>
-  <p>基准窗口：{{ baseline_window }}</p>
-  <p>对比窗口：{{ comparison_window }}</p>
+  <p>产品：{{ manifest.task.product_form }}</p>
+  <p>场景：{{ manifest.task.scenario }}</p>
   <p>分析颗粒度：{{ manifest.analysis_grain.grain }}</p>
-  <h2>风险提示</h2>
+  <p>分析单位数：{{ manifest.validation.analysis_unit_count }}</p>
+  <h2>离线分析限制</h2>
   <ul>{% for item in caveats %}<li>{{ item }}</li>{% endfor %}</ul>
 </body>
 </html>

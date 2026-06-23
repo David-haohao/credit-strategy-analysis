@@ -1,0 +1,10 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Rule Strategy Evaluation and Swap",
+  "type": "object",
+  "required": ["old_strategy_available"],
+  "properties": {
+    "old_strategy_available": {"type": "boolean"},
+    "swap_in_estimation_method": {"type": ["string", "null"]}
+  }
+}

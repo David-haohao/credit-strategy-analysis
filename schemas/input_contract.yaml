@@ -12,7 +12,7 @@ task:
   repayment_type: null            # equal_payment | bullet | custom
   repayment_description: null     # custom 还款方式必填
   scenario: null                  # first_loan_admission | reloan | limit | pricing | drawdown | in_life | warning | rule_review | strategy_compare
-  task_type: null                 # rule_mining | rule_backtest | rule_funnel | score_cutoff | strategy_simulation | swap_analysis | monitoring | reporting | metric_definition
+  task_type: null                 # single_rule_mining | rule_combination | strategy_evaluation | final_report
 
 sample_scope:
   population: null                # application | approved | booked | mature_booked | rejected | mixed
@@ -64,15 +64,9 @@ columns:
   drawdown_id_col: null
   date_col: sample_date
   target_col: Y_label
-  score_col: null
-  score_direction: null           # high_score_high_risk | high_score_low_risk
-  score_missing_policy: null      # exclude | separate_bin | impute
-  route_col: null
   weight_col: null
   old_approval_col: null
   old_reject_code_col: null
-  new_approval_col: null
-  new_reject_code_col: null
 
 amount_columns:
   drawdown_amount: drawdown_amount
@@ -106,14 +100,23 @@ feature_policy:
   protected_overrides: []
   protected_override_reason: null
 
-monitoring:
-  baseline_window:
-    start_date: null
-    end_date: null
-  comparison_window:
-    start_date: null
-    end_date: null
-  monitor_fields: []
+single_rule_mining:
+  extreme_intervals: []           # 用户确认的极端区间
+  quantiles: []                   # 用户确认的分位点
+  business_thresholds: {}
+  min_sample_cnt: null
+  min_hit_rate: null
+  enable_cart: null
+
+rule_combination:
+  top_n: null                     # 必须由用户确认
+  ranking_metric: null            # 必须为 lift
+  execution_mode: null            # 必须为 sequential_reject
+  tie_break_rule: null
+
+strategy_evaluation:
+  old_strategy_available: null
+  swap_in_estimation_method: null # 无法观测时必须由用户确认
 
 input:
   path: null
@@ -139,6 +142,4 @@ validation_rules:
   require_amount_definition_for_amount_metrics: true
   forbid_ambiguous_amount_column: true
   forbid_protected_features_by_default: true
-  require_score_direction_for_score_tasks: true
-  require_old_and_new_strategy_for_swap: true
-  require_route_col_for_routing: true
+  require_confirmed_rule_combination: true

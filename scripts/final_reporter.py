@@ -6,9 +6,8 @@ except ModuleNotFoundError:
 if __name__ == "__main__":
     raise SystemExit(
         run_task_stub(
-            "单规则挖掘",
-            "单规则挖掘前置校验",
-            expected_task_type="single_rule_mining",
-            requires_toad=True,
+            "最终报告",
+            "最终报告前置校验",
+            expected_task_type="final_report",
         )
     )
