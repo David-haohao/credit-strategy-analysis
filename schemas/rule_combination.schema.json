@@ -1,12 +1,13 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "Lift TopN Sequential Reject Combination",
+  "title": "Lift TopN 级联规则组合配置",
   "type": "object",
-  "required": ["top_n", "ranking_metric", "execution_mode"],
+  "required": ["top_n", "rank_by", "execution_mode", "tie_policy"],
   "properties": {
     "top_n": {"type": "integer", "minimum": 1},
-    "ranking_metric": {"const": "lift"},
+    "rank_by": {"const": "lift_desc"},
     "execution_mode": {"const": "sequential_reject"},
-    "tie_break_rule": {"type": ["string", "null"]}
-  }
+    "tie_policy": {"type": "string", "minLength": 1}
+  },
+  "additionalProperties": true
 }

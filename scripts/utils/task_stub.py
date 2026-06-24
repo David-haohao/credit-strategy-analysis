@@ -1,4 +1,4 @@
-"""为未实现的分析任务提供一致的前置校验 CLI。"""
+"""未实现分析任务的统一前置校验 CLI。"""
 
 from __future__ import annotations
 
@@ -18,11 +18,7 @@ from .contracts import (
 
 
 def run_task_stub(
-    task_name: str,
-    description: str,
-    *,
-    expected_task_type: str,
-    requires_toad: bool = False,
+    task_name: str, description: str, expected_task_type: str, *, requires_toad: bool = False
 ) -> int:
     parser = argparse.ArgumentParser(description=description)
     parser.add_argument("--config", required=True, help="UTF-8 YAML 运行配置")
@@ -32,22 +28,15 @@ def run_task_stub(
     args = parser.parse_args()
     try:
         config = load_yaml(args.config)
+        if config.get("task", {}).get("task_type") != expected_task_type:
+            raise ContractValidationError(f"{task_name}只接受 {expected_task_type} 任务")
         receipt = load_confirmation_receipt(args.confirmation)
         data = pd.read_csv(args.input, encoding="utf-8-sig")
         validation = validate_run_contract(config, receipt, data)
-        if config["task"]["task_type"] != expected_task_type:
-            raise ContractValidationError(
-                f"{task_name}要求 task.task_type={expected_task_type}"
-            )
         if requires_toad:
             require_toad()
         manifest = write_run_manifest(
-            Path(args.output_dir),
-            config,
-            receipt,
-            validation,
-            len(data),
-            ["run_manifest.json"],
+            Path(args.output_dir), config, receipt, validation, len(data), ["run_manifest.json"]
         )
     except (ContractValidationError, OSError, RuntimeError, ValueError) as error:
         print(f"{task_name}前置校验失败: {error}")

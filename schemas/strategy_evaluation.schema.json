@@ -1,10 +1,29 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "Rule Strategy Evaluation and Swap",
+  "title": "策略效果与 Swap 评估配置",
   "type": "object",
-  "required": ["old_strategy_available"],
+  "required": ["compare_with_old_strategy"],
   "properties": {
-    "old_strategy_available": {"type": "boolean"},
-    "swap_in_estimation_method": {"type": ["string", "null"]}
-  }
+    "compare_with_old_strategy": {"type": "boolean"},
+    "old_decision_col": {"type": ["string", "null"]},
+    "new_decision_col": {"type": ["string", "null"]},
+    "comparison_population": {"type": ["string", "null"]},
+    "swap_in_observability": {"enum": ["estimated", "unobservable", null]},
+    "swap_in_estimation_method": {"type": ["string", "null"]},
+    "segment_columns": {"type": "array", "items": {"type": "string"}}
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"compare_with_old_strategy": {"const": true}}},
+      "then": {
+        "required": ["old_decision_col", "new_decision_col", "comparison_population", "swap_in_observability"],
+        "not": {"properties": {"swap_in_observability": {"const": "direct_observation"}}}
+      }
+    },
+    {
+      "if": {"properties": {"swap_in_observability": {"const": "estimated"}}},
+      "then": {"required": ["swap_in_estimation_method"]}
+    }
+  ],
+  "additionalProperties": true
 }

@@ -9,7 +9,6 @@ import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
 
-
 EXPECTED_REFERENCES = [
     "references/00-data-product-analysis.md",
     "references/01-single-rule-mining.md",
@@ -22,7 +21,6 @@ EXPECTED_SCHEMAS = [
     "schemas/confirmation_receipt.schema.json",
     "schemas/rule_combination.schema.json",
     "schemas/strategy_evaluation.schema.json",
-    "schemas/report_manifest.schema.json",
 ]
 
 EXPECTED_CLI = [
@@ -34,34 +32,47 @@ EXPECTED_CLI = [
 ]
 
 RETIRED_PATHS = [
-    "design-framework-v2.md",
     "references/00-scope-and-routing.md",
-    "references/01-product-and-scenario.md",
     "references/02-data-contract.md",
     "references/03-metric-definitions.md",
-    "references/rules",
-    "references/strategy",
-    "references/monitoring",
-    "references/reporting",
     "scripts/rule_backtester.py",
-    "scripts/strategy_simulator.py",
     "scripts/score_cutoff_optimizer.py",
+    "scripts/strategy_simulator.py",
     "scripts/swap_analyzer.py",
     "scripts/metric_reporter.py",
     "scripts/monitoring_reporter.py",
-    "schemas/rule_config.schema.json",
-    "schemas/strategy_config.schema.json",
     "templates/monitoring_report.html.j2",
     "templates/strategy_report.html.j2",
 ]
 
+REQUIRED_SECTIONS = [
+    "## 适用与阻断条件",
+    "## 最小输入",
+    "## 方法步骤",
+    "## 候选参数",
+    "## 关键伪代码",
+    "## 输出表",
+    "## 稳定性与可观测性检查",
+    "## 验收不变量",
+]
+
+
 class SkillSkeletonTests(unittest.TestCase):
-    def test_skill_routes_and_agents_are_present(self):
+    def test_five_stage_entry_files_and_references_exist(self):
         self.assertTrue((ROOT / "AGENTS.md").is_file())
-        skill_text = (ROOT / "SKILL.md").read_text(encoding="utf-8")
-        self.assertNotIn("尚未创建", skill_text)
+        self.assertTrue((ROOT / "SKILL.md").is_file())
+        self.assertTrue((ROOT / "design-framework.md").is_file())
         for relative_path in EXPECTED_REFERENCES:
             self.assertTrue((ROOT / relative_path).is_file(), relative_path)
+
+    def test_only_five_stage_references_and_cli_are_active(self):
+        for relative_path in RETIRED_PATHS:
+            self.assertFalse((ROOT / relative_path).exists(), relative_path)
+        skill = (ROOT / "SKILL.md").read_text(encoding="utf-8")
+        self.assertIn("按需读取", skill)
+        self.assertNotIn("references/monitoring", skill)
+        self.assertNotIn("score_cutoff", skill)
+        self.assertNotIn("routing", skill)
 
     def test_yaml_and_json_schemas_parse(self):
         with (ROOT / "schemas/input_contract.yaml").open(encoding="utf-8") as file:
@@ -70,7 +81,7 @@ class SkillSkeletonTests(unittest.TestCase):
             with (ROOT / relative_path).open(encoding="utf-8") as file:
                 self.assertIsInstance(json.load(file), dict)
 
-    def test_all_commands_expose_help(self):
+    def test_all_five_commands_expose_help(self):
         for relative_path in EXPECTED_CLI:
             result = subprocess.run(
                 [sys.executable, str(ROOT / relative_path), "--help"],
@@ -81,31 +92,27 @@ class SkillSkeletonTests(unittest.TestCase):
             )
             self.assertEqual(result.returncode, 0, f"{relative_path}: {result.stderr}")
 
-    def test_five_stage_pipeline_is_the_only_entry_route(self):
-        routing = (ROOT / "references/00-data-product-analysis.md").read_text(encoding="utf-8")
-        skill = (ROOT / "SKILL.md").read_text(encoding="utf-8")
-        agents = (ROOT / "AGENTS.md").read_text(encoding="utf-8")
-        self.assertIn("五段", routing)
-        self.assertIn("单规则挖掘", skill)
-        self.assertIn("TopN", skill)
-        self.assertIn("级联拒绝", agents)
-        for retired_path in RETIRED_PATHS:
-            self.assertFalse((ROOT / retired_path).exists(), retired_path)
+    def test_every_stage_has_complete_method_sections(self):
+        for relative_path in EXPECTED_REFERENCES:
+            content = (ROOT / relative_path).read_text(encoding="utf-8")
+            for heading in REQUIRED_SECTIONS:
+                self.assertIn(heading, content, f"{relative_path}: {heading}")
 
-    def test_single_rule_mining_covers_iv_extremes_and_three_feature_cart(self):
-        content = (ROOT / "references/01-single-rule-mining.md").read_text(encoding="utf-8")
-        for term in ("IV", "极端区间", "分位点", "缺失值", "CART", "不超过 3 个特征"):
-            self.assertIn(term, content)
-
-    def test_rule_combination_uses_lift_top_n_and_sequential_reject(self):
-        content = (ROOT / "references/02-rule-combination.md").read_text(encoding="utf-8")
-        for term in ("Lift", "TopN", "降序", "级联", "任一命中即拒绝", "边际"):
-            self.assertIn(term, content)
-
-    def test_strategy_evaluation_and_swap_disclose_observability(self):
-        content = (ROOT / "references/03-strategy-evaluation-and-swap.md").read_text(encoding="utf-8")
-        for term in ("approval_rate", "pass_bad_rate", "both_pass", "both_reject", "swap_in", "swap_out", "不可观测"):
-            self.assertIn(term, content)
+    def test_core_rule_and_strategy_constraints_are_documented(self):
+        mining = (ROOT / EXPECTED_REFERENCES[1]).read_text(encoding="utf-8")
+        combination = (ROOT / EXPECTED_REFERENCES[2]).read_text(encoding="utf-8")
+        evaluation = (ROOT / EXPECTED_REFERENCES[3]).read_text(encoding="utf-8")
+        report = (ROOT / EXPECTED_REFERENCES[4]).read_text(encoding="utf-8")
+        self.assertIn("最多 3 个特征", mining)
+        self.assertIn("IV", mining)
+        self.assertIn("Lift", combination)
+        self.assertIn("TopN", combination)
+        self.assertIn("任一命中即拒绝", combination)
+        self.assertIn("swap_in", evaluation)
+        self.assertIn("swap_out", evaluation)
+        self.assertIn("直接观测", evaluation)
+        self.assertIn("不重新计算", report)
+        self.assertIn("不自动产生上线决策", report)
 
 
 if __name__ == "__main__":

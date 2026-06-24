@@ -1,42 +1,106 @@
-# 阶段 3：策略效果与 Swap
+# 阶段 3：策略效果与 Swap 评估
 
-## 目的与输入
+## 适用与阻断条件
 
-评估阶段 2 形成的新准入策略，并在旧策略结果存在时做新旧 Swap。输入为新策略样本级结果、确认的成熟标签、金额口径和可选旧策略通过/拒绝结果。
+用于把阶段 2 的级联拒绝规则视为新准入策略，统一评估策略效果；当旧策略结果可用时，对齐新旧决策并进行 Swap 分析。它不改变规则顺序、阈值或 TopN，也不对不可观测样本制造表现标签。
 
-## 整体策略效果
+新策略决策、成熟标签、样本总体、指标口径或金额定义未确认时停止。若开启新旧比较，旧/新决策字段、比较总体和 `swap_in` 可观测性处理均须确认。
 
-以确认分析单位计算：
+## 最小输入
 
-- `approval_rate`、`reject_rate`
-- `pass_bad_rate`、`reject_bad_rate`（仅有真实表现时）
-- 坏客户捕获、好客户误伤
-- 确认的金额风险指标
+- 阶段 0 的确认凭证、成熟样本、`analysis_unit_id`、标签、金额口径和旧策略字段（如有）。
+- 阶段 2 的 `cascade_funnel.csv`、样本级新策略决策和组合 manifest。
+- 确认的通过/拒绝定义，以及新策略拒绝规则命中明细。
+- 旧策略比较启用时：旧/新决策列、共同样本范围、分层字段、`swap_in` 为估计或不可观测的声明；估计时还需确认方法。
 
-未成熟、未知标签和拒绝无真实表现样本不得混入观测风险指标。
+## 方法步骤
 
-## Swap
+1. 对齐阶段 2 的新策略决策和阶段 0 的成熟表现，确认每个 `analysis_unit_id` 仅出现一次且分母一致。
+2. 将“未命中任一拒绝规则”定义为新策略通过，“命中至少一条”定义为新策略拒绝；按确认标签计算通过/拒绝量、通过率、拒绝率、成熟风险、坏客户捕获和好客户误伤。
+3. 对金额指标，仅在确认的分子、分母、过滤和聚合颗粒度下汇总；同时输出计数口径，不能以金额指标替代样本风险。
+4. 若存在旧策略，以同一比较总体构造四个互斥分组：`both_pass`、`both_reject`、`swap_in`（旧拒新通过）与 `swap_out`（旧通过新拒绝）。
+5. 对 `both_pass`、`both_reject` 和满足成熟表现条件的 `swap_out`，标记直接观测并计算对应表现。`swap_in` 默认没有直接表现，只能标为“估计”或“不可观测”。
+6. 用户确认估计方法时，单独输出估计值、方法、假设、适用样本和选择偏差；未确认时不生成 `swap_in` 坏账率。
+7. 按确认的产品、时间、客群或其他分层复算，并检查总体结论是否掩盖方向相反的分层结果。
+8. 形成策略取舍结论和风险披露，供阶段 4 报告引用；不输出上线决策。
 
-当旧策略存在时，按新旧通过结果分为 `both_pass`、`both_reject`、`swap_in`、`swap_out`。
+## 指标与 Swap 分组口径
 
-- `swap_out` 仅在旧策略通过且有成熟表现时计算直接观测风险和捕获。
-- `swap_in` 在旧策略下通常没有表现；未确认估计方法时必须标记为不可观测，不得当作真实坏账率。
-- 所有分群可按用户确认的产品、渠道或时间分层，但不引入分路由策略。
-
-## 伪代码
+新策略的样本指标必须基于相同成熟总体计算：
 
 ```text
-new_result = apply_selected_sequential_reject_rules(all_units)
-evaluate_new_strategy_on_confirmed_mature_population(new_result)
-if old_strategy_result_exists:
-    groups = split_into_both_pass_both_reject_swap_in_swap_out(old, new)
-    evaluate_observable_groups(groups)
-    label_swap_in_as_estimated_or_unobservable()
+approval_rate = new_pass_count / comparison_population_count
+reject_rate   = new_reject_count / comparison_population_count
+pass_bad_rate = bad_count(new_pass) / count(new_pass)
+bad_capture   = bad_count(new_reject) / bad_count(comparison_population)
+good_harm     = good_count(new_reject) / good_count(comparison_population)
 ```
 
-## 输出
+金额风险仅在已确认过滤后的单位上计算，例如 `sum(确认分子) / sum(确认分母)`；必须与样本坏账率并列展示，不能混用分母。
 
-- `03_strategy_summary.csv`：通过、拒绝、成熟风险、捕获、误伤和金额指标。
-- `03_strategy_detail.csv`：分析单位、新策略结果、规则命中和可观测性状态。
-- `03_swap_summary.csv`、`03_swap_detail.csv`：四类 Swap 人群及直接观测/估计/不可观测标记。
-- `03_manifest.json`：新策略版本、旧策略字段、成熟规则和金额口径。
+| Swap 分组 | 旧策略 | 新策略 | 表现解释 |
+|---|---|---|---|
+| `both_pass` | 通过 | 通过 | 若成熟表现存在，可直接观测 |
+| `both_reject` | 拒绝 | 拒绝 | 仅描述决策一致性；表现是否可观测取决于样本来源 |
+| `swap_out` | 通过 | 拒绝 | 旧策略通过且成熟时可直接观察被新策略拒绝客群 |
+| `swap_in` | 拒绝 | 通过 | 通常没有直接表现，必须估计或标注不可观测 |
+
+估计 `swap_in` 时，报告必须把估计口径与直接观测值分表显示，至少记录估计方法、训练/匹配总体、覆盖率、关键假设和选择偏差。没有这些内容时只能输出数量与不可观测标识。
+
+## 候选参数
+
+| 参数 | 必须确认的内容 | 作用 |
+|---|---|---|
+| 新策略通过定义 | 未命中级联拒绝规则或其他明确映射 | 固定通过/拒绝分组 |
+| 评估总体 | 成熟总体、时间范围、过滤和权重（如使用） | 固定所有分母 |
+| 风险指标 | 样本坏账率、确认金额指标及分母 | 统一效果计算 |
+| 旧策略比较 | 是否启用、旧/新决策字段、共同样本范围 | 生成 Swap |
+| `swap_in` 处理 | 估计方法或明确不可观测 | 禁止伪造直接表现 |
+| 分层 | 产品、时间、客群或确认分组 | 发现异质性 |
+
+## 关键伪代码
+
+```text
+new_decision = cascade_result.to_decision(pass_if_no_rule_hit=True)
+overall = evaluate_strategy(new_decision, mature_label, confirmed_amount_metric)
+
+if compare_with_old_strategy:
+    aligned = align_on_analysis_unit(old_decision, new_decision)
+    groups = {
+        both_pass: old_pass & new_pass,
+        both_reject: old_reject & new_reject,
+        swap_in: old_reject & new_pass,
+        swap_out: old_pass & new_reject,
+    }
+    direct = evaluate_observed(groups[both_pass, both_reject, swap_out])
+    swap_in = estimate_or_mark_unobservable(groups[swap_in], confirmed_method)
+    assert_mutually_exclusive_and_exhaustive(groups)
+
+write_strategy_effect_swap_and_disclosures()
+```
+
+## 输出表
+
+| 文件 | 最少字段 |
+|---|---|
+| `strategy_effect_summary.csv` | 策略、总体样本、通过/拒绝量与占比、成熟风险、坏客户捕获、好客户误伤、金额指标、分母说明 |
+| `strategy_layer_effect.csv` | 级联层级、进入样本、新增拒绝、边际风险、累计效果 |
+| `swap_summary.csv` | 分组、样本量、占比、旧/新决策、表现指标、可观测性、估计方法 |
+| `swap_segment_detail.csv` | 分层、Swap 分组、样本量、表现、可观测性、风险提示 |
+| `strategy_evaluation_manifest.json` | 比较总体、决策字段、金额口径、估计假设、输出路径 |
+
+## 稳定性与可观测性检查
+
+- 四个 Swap 分组必须互斥且并集等于确认的共同比较总体；缺失旧/新决策的单位单独披露，不得静默丢弃。
+- `swap_out` 只有在旧策略实际通过且存在成熟表现时才是直接观测；否则同样需要标记限制。
+- `swap_in` 不得标为直接观测。估计方法、假设和偏差必须与直接观测指标分列。
+- 所有通过率、风险、捕获、误伤和金额指标必须保留分母、样本范围与成熟过滤。
+- 发现分层方向反转、样本不足或金额与样本结论不一致时必须写入风险披露。
+
+## 验收不变量
+
+- 新策略决策可由阶段 2 冻结规则逐单位复现。
+- 整体策略效果与阶段 2 级联拒绝量一致。
+- `both_pass`、`both_reject`、`swap_in`、`swap_out` 完整、互斥且可追溯。
+- `swap_in` 仅为估计或不可观测，绝不伪装为直接观测。
+- 报告前的结论同时呈现风险收益、好客户误伤和观测边界。

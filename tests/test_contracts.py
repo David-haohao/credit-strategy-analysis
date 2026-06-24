@@ -68,6 +68,7 @@ def valid_config():
             "allow_protected_override": False,
             "protected_overrides": [],
         },
+        "strategy_evaluation": {"compare_with_old_strategy": False},
         "input": {"path": "input.csv"},
         "output": {"directory": "output"},
     }
@@ -147,53 +148,6 @@ class ContractValidationTests(unittest.TestCase):
         receipt["scenario"] = "reloan"
         self.assert_contract_error(receipt=receipt, text="应用场景")
 
-    def test_rejects_removed_task_type(self):
-        config = copy.deepcopy(self.config)
-        receipt = copy.deepcopy(self.receipt)
-        config["task"]["task_type"] = "score_cutoff"
-        receipt["task_type"] = "score_cutoff"
-        self.assert_contract_error(config=config, receipt=receipt, text="任务类型")
-
-    def test_rule_combination_requires_confirmed_top_n_lift_and_sequential_reject(self):
-        config = copy.deepcopy(self.config)
-        receipt = copy.deepcopy(self.receipt)
-        config["task"]["task_type"] = "rule_combination"
-        receipt["task_type"] = "rule_combination"
-        config["rule_combination"] = {
-            "top_n": None,
-            "ranking_metric": "lift",
-            "execution_mode": "sequential_reject",
-        }
-        receipt["rule_combination"] = copy.deepcopy(config["rule_combination"])
-        self.assert_contract_error(config=config, receipt=receipt, text="TopN")
-
-    def test_rule_combination_rejects_non_lift_ranking(self):
-        config = copy.deepcopy(self.config)
-        receipt = copy.deepcopy(self.receipt)
-        config["task"]["task_type"] = "rule_combination"
-        receipt["task_type"] = "rule_combination"
-        config["rule_combination"] = {
-            "top_n": 3,
-            "ranking_metric": "iv",
-            "execution_mode": "sequential_reject",
-        }
-        receipt["rule_combination"] = copy.deepcopy(config["rule_combination"])
-        self.assert_contract_error(config=config, receipt=receipt, text="Lift")
-
-    def test_valid_rule_combination_contract(self):
-        config = copy.deepcopy(self.config)
-        receipt = copy.deepcopy(self.receipt)
-        config["task"]["task_type"] = "rule_combination"
-        receipt["task_type"] = "rule_combination"
-        config["rule_combination"] = {
-            "top_n": 3,
-            "ranking_metric": "lift",
-            "execution_mode": "sequential_reject",
-        }
-        receipt["rule_combination"] = copy.deepcopy(config["rule_combination"])
-        validated = validate_run_contract(config, receipt, self.data)
-        self.assertEqual(validated["analysis_unit_count"], 2)
-
     def test_rejects_missing_analysis_grain(self):
         config = copy.deepcopy(self.config)
         config["analysis_grain"]["grain"] = None
@@ -218,6 +172,31 @@ class ContractValidationTests(unittest.TestCase):
         config = copy.deepcopy(self.config)
         config["feature_policy"]["candidate_features"] = ["Y_label"]
         self.assert_contract_error(config=config, text="保护列")
+
+    def test_rejects_retired_task_type(self):
+        config = copy.deepcopy(self.config)
+        config["task"]["task_type"] = "monitoring"
+        receipt = copy.deepcopy(self.receipt)
+        receipt["task_type"] = "monitoring"
+        self.assert_contract_error(config=config, receipt=receipt, text="任务类型")
+
+    def test_rule_combination_requires_confirmed_top_n_lift_and_cascade_semantics(self):
+        config = copy.deepcopy(self.config)
+        receipt = copy.deepcopy(self.receipt)
+        config["task"]["task_type"] = "rule_combination"
+        receipt["task_type"] = "rule_combination"
+        config["rule_combination"] = {"top_n": None, "rank_by": "lift_desc", "execution_mode": "sequential_reject"}
+        self.assert_contract_error(config=config, receipt=receipt, text="TopN")
+
+    def test_strategy_swap_requires_observability_disclosure(self):
+        config = copy.deepcopy(self.config)
+        config["strategy_evaluation"] = {
+            "compare_with_old_strategy": True,
+            "old_decision_col": "old_approval_flag",
+            "new_decision_col": "new_approval_flag",
+            "comparison_population": "mature_booked",
+        }
+        self.assert_contract_error(config=config, text="可观测性")
 
     def test_valid_contract_generates_analysis_unit_and_manifest(self):
         validated = validate_run_contract(self.config, self.receipt, self.data)

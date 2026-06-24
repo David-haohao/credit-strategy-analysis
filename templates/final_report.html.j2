@@ -1,13 +1,16 @@
 <!doctype html>
 <html lang="zh-CN">
-<head><meta charset="utf-8"><title>{{ title }}</title></head>
+<head>
+  <meta charset="utf-8">
+  <title>{{ title }}</title>
+</head>
 <body>
   <h1>{{ title }}</h1>
-  <p>产品：{{ manifest.task.product_form }}</p>
-  <p>场景：{{ manifest.task.scenario }}</p>
-  <p>分析颗粒度：{{ manifest.analysis_grain.grain }}</p>
-  <p>分析单位数：{{ manifest.validation.analysis_unit_count }}</p>
-  <h2>离线分析限制</h2>
-  <ul>{% for item in caveats %}<li>{{ item }}</li>{% endfor %}</ul>
+  <section id="scope"></section>
+  <section id="data-and-product"></section>
+  <section id="single-rules"></section>
+  <section id="top-n-cascade"></section>
+  <section id="strategy-effect-and-swap"></section>
+  <section id="conclusion-and-disclosures"></section>
 </body>
 </html>
