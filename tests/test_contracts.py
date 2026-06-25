@@ -30,7 +30,7 @@ def valid_config():
         "sample_scope": {"population": "mature_booked"},
         "analysis_grain": {
             "grain": "customer",
-            "id_cols": ["customer_id"],
+            "id_cols": ["entity_key"],
             "label_grain": "customer",
             "feature_grain": "customer",
             "output_grain": "customer",
@@ -43,7 +43,7 @@ def valid_config():
             "unmapped_required_fields": [],
         },
         "label": {
-            "target_col": "Y_label",
+            "target_col": "target_flag",
             "positive_class": 1,
             "bad_definition": "DPD30_plus_MOB3",
             "maturity_rule": "mature_flag == 1",
@@ -56,15 +56,15 @@ def valid_config():
             "filter": "mature_flag == 1",
         },
         "columns": {
-            "id_cols": ["customer_id"],
-            "target_col": "Y_label",
+            "id_cols": ["entity_key"],
+            "target_col": "target_flag",
             "date_col": "sample_date",
             "score_col": None,
             "score_direction": None,
         },
         "feature_policy": {
             "candidate_features": ["income"],
-            "protected_columns": ["customer_id", "Y_label"],
+            "protected_columns": ["entity_key", "target_flag"],
             "allow_protected_override": False,
             "protected_overrides": [],
         },
@@ -86,11 +86,11 @@ def valid_receipt():
         "field_mapping": {"confirmed": True},
         "analysis_grain": {
             "grain": "customer",
-            "id_cols": ["customer_id"],
+            "id_cols": ["entity_key"],
             "aggregation_rule": None,
         },
         "label": {
-            "target_col": "Y_label",
+            "target_col": "target_flag",
             "positive_class": 1,
             "bad_definition": "DPD30_plus_MOB3",
             "maturity_rule": "mature_flag == 1",
@@ -111,8 +111,8 @@ class ContractValidationTests(unittest.TestCase):
         self.receipt = valid_receipt()
         self.data = pd.DataFrame(
             {
-                "customer_id": ["C1", "C2"],
-                "Y_label": [0, 1],
+                "entity_key": ["C1", "C2"],
+                "target_flag": [0, 1],
                 "income": [1000, 800],
                 "sample_date": ["2026-01-01", "2026-01-02"],
                 "mature_flag": [1, 1],
@@ -170,7 +170,7 @@ class ContractValidationTests(unittest.TestCase):
 
     def test_rejects_protected_candidate_feature(self):
         config = copy.deepcopy(self.config)
-        config["feature_policy"]["candidate_features"] = ["Y_label"]
+        config["feature_policy"]["candidate_features"] = ["target_flag"]
         self.assert_contract_error(config=config, text="保护列")
 
     def test_rejects_retired_task_type(self):
@@ -200,7 +200,7 @@ class ContractValidationTests(unittest.TestCase):
 
     def test_valid_contract_generates_analysis_unit_and_manifest(self):
         validated = validate_run_contract(self.config, self.receipt, self.data)
-        unit_id = build_analysis_unit_id(self.data, ["customer_id"])
+        unit_id = build_analysis_unit_id(self.data, ["entity_key"])
         self.assertEqual(unit_id.tolist(), ["C1", "C2"])
         self.assertIsNone(safe_div(1, 0))
 
@@ -225,10 +225,11 @@ class ContractValidationTests(unittest.TestCase):
             config_path = directory / "config.yaml"
             receipt_path = directory / "confirmation.json"
             input_path = directory / "input.csv"
-            output_dir = directory / "output"
+            run_dir = directory / "run"
             config = copy.deepcopy(self.config)
             config["confirmation"]["receipt_path"] = str(receipt_path)
             config["input"]["path"] = str(input_path)
+            config["output"]["directory"] = str(run_dir)
             with config_path.open("w", encoding="utf-8") as file:
                 yaml.safe_dump(config, file, allow_unicode=True, sort_keys=False)
             receipt_path.write_text(json.dumps(self.receipt, ensure_ascii=False), encoding="utf-8")
@@ -241,7 +242,7 @@ class ContractValidationTests(unittest.TestCase):
                     "--config", str(config_path),
                     "--confirmation", str(receipt_path),
                     "--input", str(input_path),
-                    "--output-dir", str(output_dir),
+                    "--run-dir", str(run_dir),
                 ],
                 cwd=root,
                 text=True,
@@ -249,7 +250,9 @@ class ContractValidationTests(unittest.TestCase):
                 check=False,
             )
             self.assertEqual(result.returncode, 0, result.stderr)
-            self.assertTrue((output_dir / "run_manifest.json").is_file())
+            self.assertTrue((run_dir / "run_manifest.json").is_file())
+            self.assertTrue((run_dir / "00_data_contract" / "stage_manifest.json").is_file())
+            self.assertTrue((run_dir / "00_data_contract" / "artifact_inventory.json").is_file())
 
 
 if __name__ == "__main__":

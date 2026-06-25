@@ -85,3 +85,4 @@ write_utf8_html_and_report_manifest(report)
 - 所有指标、口径和结论均可回溯至确认凭证与 manifest。
 - 报告包含策略取舍结论和风险披露，但不自动产生上线决策。
 - HTML、CSV 和 JSON 均为 UTF-8，且缺失来源时明确阻断。
+> **固定输出契约：** 先读取 `references/06-stage-output-contract.md`。报告只读取阶段 00 至 03 的 `stage_manifest.json` 和 `artifact_inventory.json` 所登记、哈希一致的聚合产物，并只向 `04_final_report/` 写入固定报告产物。

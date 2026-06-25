@@ -61,7 +61,7 @@ selected = take_confirmed_top_n(ranked, TopN)
 remaining = all_confirmed_analysis_units
 for position, rule in enumerate(selected, start=1):
     hit = evaluate(rule.condition, remaining)
-    layer = calculate_incremental_metrics(hit, remaining, Y_label)
+    layer = calculate_incremental_metrics(hit, remaining, confirmed_target)
     reject(rule, hit)
     remaining = remaining.exclude(hit)
     write_layer(position, rule, layer, remaining)
@@ -93,3 +93,4 @@ apply_same_selected_rules_to_oot_without_reranking()
 - 组合语义固定为“任一命中即拒绝”的顺序级联。
 - 每一层输出独立、边际与累计结果，不能用单规则结果简单相加替代。
 - OOT 仅验证已冻结组合，不重新排序、不重新选择 TopN。
+> **固定输出契约：** 先读取 `references/06-stage-output-contract.md`。本阶段只向 `02_rule_combination/` 写入固定业务表及 manifest/inventory；无 OOT 时 `cascade_oot.csv` 必须保留表头并标记未评估。

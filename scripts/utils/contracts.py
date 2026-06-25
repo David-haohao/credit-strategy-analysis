@@ -46,7 +46,7 @@ def load_confirmation_receipt(path: str | Path) -> dict[str, Any]:
 
 
 def build_analysis_unit_id(data: pd.DataFrame, id_cols: Iterable[str]) -> pd.Series:
-    """用已确认 ID 组合生成分析单位，绝不默认使用 sample_id。"""
+    """用已确认 ID 组合生成分析单位，绝不默认使用未确认的任意标识列。"""
     columns = list(id_cols)
     missing = [column for column in columns if column not in data.columns]
     if missing:

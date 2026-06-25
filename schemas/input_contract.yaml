@@ -33,7 +33,7 @@ field_mapping:
   notes: null
 
 label:
-  target_col: Y_label
+  target_col: null
   positive_class: 1
   bad_definition: null
   maturity_rule: null
@@ -48,7 +48,7 @@ amount_metric:
 
 columns:
   id_cols: []
-  target_col: Y_label
+  target_col: null
   date_col: sample_date
   old_decision_col: null
   new_decision_col: null
@@ -56,6 +56,7 @@ columns:
 feature_policy:
   candidate_features: []
   exclude_features: []
+  excluded_name_tokens: []
   protected_columns: []
   allow_protected_override: false
   protected_overrides: []
@@ -98,7 +99,8 @@ input:
   encoding: utf-8
 
 output:
-  directory: null
+  directory: null                 # 必须与 --run-dir 解析后的绝对路径一致
+  output_contract_version: "1.0"
   write_detail: true
   write_summary: true
   write_manifest: true

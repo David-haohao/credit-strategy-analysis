@@ -15,12 +15,14 @@ EXPECTED_REFERENCES = [
     "references/02-rule-combination.md",
     "references/03-strategy-evaluation-and-swap.md",
     "references/04-final-report.md",
+    "references/06-stage-output-contract.md",
 ]
 
 EXPECTED_SCHEMAS = [
     "schemas/confirmation_receipt.schema.json",
     "schemas/rule_combination.schema.json",
     "schemas/strategy_evaluation.schema.json",
+    "schemas/output_contract.schema.json",
 ]
 
 EXPECTED_CLI = [
@@ -113,6 +115,17 @@ class SkillSkeletonTests(unittest.TestCase):
         self.assertIn("直接观测", evaluation)
         self.assertIn("不重新计算", report)
         self.assertIn("不自动产生上线决策", report)
+
+
+    def test_fixed_stage_output_contract_is_documented(self):
+        skill = (ROOT / "SKILL.md").read_text(encoding="utf-8")
+        contract = (ROOT / "references/06-stage-output-contract.md").read_text(encoding="utf-8")
+        self.assertIn("06-stage-output-contract.md", skill)
+        self.assertIn("--run-dir", skill)
+        self.assertIn("stage_manifest.json", contract)
+        self.assertIn("artifact_inventory.json", contract)
+        self.assertIn("output_contract_version", contract)
+        self.assertIn("不复制", contract)
 
 
 if __name__ == "__main__":
