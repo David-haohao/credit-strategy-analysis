@@ -14,7 +14,7 @@ from typing import Any, Mapping
 import pandas as pd
 
 
-OUTPUT_CONTRACT_VERSION = "1.0"
+OUTPUT_CONTRACT_VERSION = "1.1"
 
 
 class OutputContractError(ValueError):
@@ -35,8 +35,8 @@ STAGE_SPECS: dict[str, dict[str, Any]] = {
         "directory": "01_rule_mining",
         "upstreams": ["00"],
         "artifacts": {
-            "feature_screening.csv": ["feature_name", "feature_status", "screening_reason", "iv", "coverage_count", "stability_status"],
-            "bin_iv_detail.csv": ["feature_name", "bin_label", "bin_lower", "bin_upper", "good_count", "bad_count", "woe", "iv", "warning"],
+            "feature_screening.csv": ["feature_name", "feature_status", "screening_reason", "iv", "coverage_count", "monotonicity", "stability_status"],
+            "bin_iv_detail.csv": ["feature_name", "bin_order", "bin_label", "bin_lower", "bin_upper", "good_count", "bad_count", "bad_rate", "woe", "iv", "warning"],
             "single_rule_candidates.csv": ["rule_id", "feature_name", "rule_expression", "hit_count", "coverage_rate", "reject_rate", "non_hit_reject_rate", "reject_lift", "reject_capture_rate", "pass_injury_rate", "candidate_status", "stability_status"],
             "cart_path_candidates.csv": ["rule_id", "feature_name", "rule_expression", "hit_count", "coverage_rate", "reject_rate", "non_hit_reject_rate", "reject_lift", "reject_capture_rate", "pass_injury_rate", "candidate_status", "stability_status"],
             "rule_stability.csv": ["rule_id", "stability_status", "evaluation_window", "metric_name", "metric_value", "reason"],
