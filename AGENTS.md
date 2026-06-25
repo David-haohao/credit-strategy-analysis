@@ -1,27 +1,36 @@
-# 信贷规则策略分析协作规范
+# credit-strategy-analysis 维护者协作规范
 
-## 工作边界
+本文件面向维护这个技能包的 Agent/开发者；运行时如何使用技能由 `SKILL.md` 和 `references/` 负责。不要在这里重复五阶段路由、CLI 使用说明或业务算法细节。
 
-仅支持五阶段离线分析：数据与产品确认、单规则挖掘、Lift TopN 规则组合、策略效果与 Swap、最终报告。不得扩展为线上配置、上线审批、自动发布、灰度、监控或模型训练。
+## 维护边界
 
-执行前必须由用户确认产品形态、还款方式、场景、样本口径、时间窗口、分析粒度、`id_cols`、字段映射、标签和成熟规则、候选特征、金额口径、规则参数、TopN 与级联语义。涉及 Swap-in 风险估计，还须确认成熟标签、可用时点、观察窗口、估计方法和分箱/压力假设。
+- 技能只服务离线信贷策略分析，不扩展为线上配置、上线审批、自动发布、灰度、监控或模型训练。
+- 样本字段、样本标签、渠道字段、项目特例排除词不得写死进技能内容；必须放入运行配置、确认凭证或项目产物。
+- 固定阶段目录、固定文件名和最小字段集合以 `scripts/utils/output_contract.py` 和 `references/06-stage-output-contract.md` 为准；改变产物名、最小字段或语义时必须提升契约版本。
 
-## 输出目录包
+## 修改原则
 
-- 先遵循 `references/06-stage-output-contract.md`。`--run-dir` 必须等于 `output.directory`，所有写入路径必须位于该目录内。
-- 根目录固定保存 `input_config.yaml`、`confirmation_receipt.json`、`run_manifest.json`、`source_fingerprint.json`；绝不复制原始输入文件。
-- 每阶段固定保存业务表、`stage_manifest.json` 和 `artifact_inventory.json`。默认不得覆盖；恢复仅允许配置、确认、输入指纹和上游哈希完全一致。
-- 输出一律 UTF-8。禁止客户标识、原始 JSON、敏感原值或未登记数据进入 CSV、manifest、inventory 或 HTML。
-- `feature_name`、候选特征、分箱、单规则和 CART 规则必须遵守当次配置中确认的 `feature_policy.exclude_features` 与 `feature_policy.excluded_name_tokens`。
+- `SKILL.md` 保持精简，只写触发后的运行说明、阶段入口和必要边界。
+- 详细流程写入 `references/`，可复用逻辑写入 `scripts/`，schema 写入 `schemas/`，报告模板写入 `templates/`。
+- HTML 报告器只能读取已登记且哈希一致的阶段产物，不得扫描目录、读取原始数据或重算上游指标。
+- 不输出客户明细、原始 JSON、敏感原值；具体敏感/保护字段由 `analysis_grain.id_cols`、`columns.id_cols`、`feature_policy.protected_columns`、`feature_policy.exclude_features` 和 `feature_policy.excluded_name_tokens` 声明。
 
-## 解释约束
+## 同步到 Codex 安装目录
 
-- CART 只可抽取根到叶的 AND 路径，且最多 3 个特征。
-- 规则组合只允许已确认的 Lift 降序 TopN 与“任一命中即拒绝”的级联语义。
-- 成熟风险、金额和 Swap 指标必须披露分母、样本范围与可观测性。
-- 无 OOT 时固定写“未评估（未做时间外验证）”；无真实成熟表现时不得用经确认的旧决策字段、审批结果字段或代理标签替代风险结论。
-- HTML 只读取已登记、哈希验证通过的阶段产物；不扫描目录、不重算指标、不生成上线建议。
+- 源仓库为 `D:\my_LLM_project\07-credit-strategy-skills`。
+- Codex 实际加载目录为 `C:\Users\david\.codex\skills\credit-strategy-analysis`。
+- 同步安装时只复制 Git 跟踪文件；不要复制未跟踪草稿、缓存、`__pycache__` 或临时产物。
+- 同步后用 SHA-256 对比源仓库 Git 跟踪文件与安装目录文件，要求缺失数和哈希不一致数均为 0。
 
-## 验证与提交
+## 提交前验证
 
-每次修改后运行单元测试、YAML/JSON 解析、五个 CLI 的 `--help` 与最小阶段目录包演练。当前技能目录不是 Git 仓库，无法在此目录提交或推送。
+每次修改后至少执行：
+
+- `py -3.12 -m unittest discover -s tests -v`
+- JSON/YAML 解析检查
+- 五个 CLI 的 `--help` 检查
+- `quick_validate.py` 校验源仓库和安装目录
+- 样本字段硬编码扫描，确认正式技能文件未包含项目特例字段
+- 安装目录与源仓库 Git 跟踪文件哈希一致性检查
+
+验证通过后再提交。此仓库的远端为 `https://github.com/David-haohao/credit-strategy-analysis.git`，默认分支为 `main`；若直接推送失败，可临时使用本机代理环境变量，不要写入全局代理配置。

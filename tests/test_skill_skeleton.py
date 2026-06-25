@@ -128,5 +128,15 @@ class SkillSkeletonTests(unittest.TestCase):
         self.assertIn("不复制", contract)
 
 
+    def test_agents_md_is_maintenance_contract_not_runtime_skill_copy(self):
+        agents = (ROOT / "AGENTS.md").read_text(encoding="utf-8")
+        self.assertIn("维护者协作规范", agents)
+        self.assertIn("同步到 Codex 安装目录", agents)
+        self.assertIn("提交前验证", agents)
+        self.assertNotIn("## 五阶段路由", agents)
+        self.assertNotIn("## 可执行入口", agents)
+        self.assertLess(agents.count("references/06-stage-output-contract.md"), 2)
+
+
 if __name__ == "__main__":
     unittest.main()
