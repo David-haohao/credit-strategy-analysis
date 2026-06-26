@@ -65,7 +65,7 @@ feature_policy:
 rule_mining:
   iv_screening: null
   binning: null
-  numeric_cut_sources: []
+  numeric_cut_sources: []         # quantile:0.1 | value:1000；仅使用用户确认来源
   category_grouping: null
   min_hit_count: null
   min_hit_rate: null
@@ -77,7 +77,7 @@ rule_combination:
   top_n: null
   rank_by: null                   # 必须为 lift_desc
   execution_mode: null            # 必须为 sequential_reject
-  tie_policy: null
+  tie_policy: null                # higher_coverage_first | lower_coverage_first | input_order | rule_id_asc
 
 strategy_evaluation:
   compare_with_old_strategy: false

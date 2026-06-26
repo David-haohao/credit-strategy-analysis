@@ -59,12 +59,23 @@ class P1CalculationTests(unittest.TestCase):
 
         self.assertEqual(evaluate_rule("income >= 1000", data).tolist(), [False, True, True, False])
         self.assertEqual(evaluate_rule("income between 1000 and 1500", data).tolist(), [False, True, False, False])
+        self.assertEqual(
+            evaluate_rule("income between 1000 and 1500 and age < 40", data).tolist(),
+            [False, True, False, False],
+        )
         self.assertEqual(evaluate_rule("income >= 1000 and age < 40", data).tolist(), [False, True, False, False])
         self.assertEqual(evaluate_rule("income is missing", data).tolist(), [False, False, False, True])
+        self.assertEqual(evaluate_rule("income is not missing", data).tolist(), [True, True, True, False])
         self.assertEqual(evaluate_rule("grade == 'A'", data).tolist(), [True, False, True, False])
 
         with self.assertRaises(RuleParseError):
             evaluate_rule("__import__('os').system('echo unsafe')", data)
+        with self.assertRaises(RuleParseError):
+            evaluate_rule("income >= 1000 or age < 40", data)
+        with self.assertRaises(RuleParseError):
+            evaluate_rule("(income >= 1000)", data)
+        with self.assertRaises(RuleParseError):
+            evaluate_rule("missing(income)", data)
 
     def test_cascade_funnel_and_overlap(self):
         masks = {

@@ -45,12 +45,34 @@ def _load_stage1_candidates(run_dir: str | Path) -> pd.DataFrame:
     return candidates[~status.isin({"rejected", "failed", "not_candidate", "not_available"})].copy()
 
 
-def _rank_candidates(candidates: pd.DataFrame, top_n: int) -> tuple[list[dict], list[dict], pd.DataFrame]:
+SUPPORTED_TIE_POLICIES = {"higher_coverage_first", "lower_coverage_first", "input_order", "rule_id_asc"}
+
+
+def _has_lift_ties(ranked: pd.DataFrame) -> bool:
+    return ranked["reject_lift_numeric"].duplicated(keep=False).any()
+
+
+def _rank_candidates(candidates: pd.DataFrame, top_n: int, tie_policy: str) -> tuple[list[dict], list[dict], pd.DataFrame]:
     ranked = candidates.copy()
+    ranked["_input_order"] = range(len(ranked))
     ranked["reject_lift_numeric"] = pd.to_numeric(ranked["reject_lift"], errors="coerce")
+    if tie_policy not in SUPPORTED_TIE_POLICIES and _has_lift_ties(ranked):
+        raise OutputContractError(f"unsupported tie_policy for Lift ties: {tie_policy}")
+    if tie_policy == "higher_coverage_first":
+        sort_by = ["reject_lift_numeric", "coverage_rate", "_input_order"]
+        ascending = [False, False, True]
+    elif tie_policy == "lower_coverage_first":
+        sort_by = ["reject_lift_numeric", "coverage_rate", "_input_order"]
+        ascending = [False, True, True]
+    elif tie_policy == "rule_id_asc":
+        sort_by = ["reject_lift_numeric", "rule_id"]
+        ascending = [False, True]
+    else:
+        sort_by = ["reject_lift_numeric", "_input_order"]
+        ascending = [False, True]
     ranked = ranked.sort_values(
-        by=["reject_lift_numeric", "coverage_rate", "rule_id"],
-        ascending=[False, False, True],
+        by=sort_by,
+        ascending=ascending,
         kind="mergesort",
     ).reset_index(drop=True)
     ranked_rows = []
@@ -66,7 +88,7 @@ def _rank_candidates(candidates: pd.DataFrame, top_n: int) -> tuple[list[dict], 
                 "rule_expression": row["rule_expression"],
                 "reject_lift": row.get("reject_lift"),
                 "candidate_status": row.get("candidate_status") or "candidate",
-                "selection_reason": "selected_by_confirmed_top_n" if selected else "not_selected_beyond_top_n",
+                "selection_reason": f"selected_by_confirmed_top_n_tie_policy_{tie_policy}" if selected else "not_selected_beyond_top_n",
             }
         )
         if selected:
@@ -77,7 +99,7 @@ def _rank_candidates(candidates: pd.DataFrame, top_n: int) -> tuple[list[dict], 
                     "logical_feature_group": row.get("feature_name"),
                     "decision_action": "reject",
                     "selection_basis": "lift_desc_top_n",
-                    "selection_reason": "selected_by_confirmed_top_n",
+                    "selection_reason": f"selected_by_confirmed_top_n_tie_policy_{tie_policy}",
                 }
             )
     return ranked_rows, selected_rows, ranked.head(top_n).copy()
@@ -86,6 +108,7 @@ def _rank_candidates(candidates: pd.DataFrame, top_n: int) -> tuple[list[dict], 
 def build_rule_combination_artifacts(run_dir: str | Path, data: pd.DataFrame, config: dict) -> tuple[dict, dict]:
     candidates = _load_stage1_candidates(run_dir)
     top_n = int(config.get("rule_combination", {}).get("top_n"))
+    tie_policy = str(config.get("rule_combination", {}).get("tie_policy"))
     statuses = {"cascade_oot.csv": {"status": "not_applicable", "reason": "未评估（未做时间外验证）"}}
     if candidates.empty:
         reason = "阶段 1 未提供可组合的候选规则"
@@ -99,7 +122,7 @@ def build_rule_combination_artifacts(run_dir: str | Path, data: pd.DataFrame, co
         )
         return {}, statuses
 
-    ranked_rows, selected_rows, selected = _rank_candidates(candidates, top_n)
+    ranked_rows, selected_rows, selected = _rank_candidates(candidates, top_n, tie_policy)
     rule_masks = {}
     for _, row in selected.iterrows():
         try:

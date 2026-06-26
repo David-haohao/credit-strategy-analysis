@@ -57,11 +57,6 @@ def _evaluate_atomic(expression: str, data: pd.DataFrame) -> pd.Series:
         result = _require_column(data, missing.group("name")).isna()
         return ~result if missing.group("neg") else result
 
-    missing_func = re.fullmatch(rf"(?P<neg>not\s+)?missing\((?P<name>{_IDENTIFIER})\)", expr, flags=re.IGNORECASE)
-    if missing_func:
-        result = _require_column(data, missing_func.group("name")).isna()
-        return ~result if missing_func.group("neg") else result
-
     between = re.fullmatch(
         rf"(?P<name>{_IDENTIFIER})\s+between\s+(?P<lower>{_VALUE})\s+and\s+(?P<upper>{_VALUE})",
         expr,
@@ -89,16 +84,41 @@ def _evaluate_atomic(expression: str, data: pd.DataFrame) -> pd.Series:
     raise RuleParseError(f"unsupported rule expression: {expr}")
 
 
+def _split_and_conditions(expression: str) -> list[str]:
+    parts: list[str] = []
+    position = 0
+    text = expression.strip()
+    atomic_patterns = [
+        rf"{_IDENTIFIER}\s+between\s+{_VALUE}\s+and\s+{_VALUE}",
+        rf"{_IDENTIFIER}\s+is\s+(?:not\s+)?missing",
+        rf"{_IDENTIFIER}\s*(?:>=|<=|==|!=|>|<)\s*{_VALUE}",
+    ]
+    while position < len(text):
+        if position:
+            separator = re.match(r"\s+and\s+", text[position:], flags=re.IGNORECASE)
+            if not separator:
+                raise RuleParseError(f"unsupported rule expression: {expression}")
+            position += separator.end()
+        matched = None
+        for pattern in atomic_patterns:
+            candidate = re.match(pattern, text[position:], flags=re.IGNORECASE)
+            if candidate:
+                matched = candidate.group(0)
+                break
+        if matched is None:
+            raise RuleParseError(f"unsupported rule expression: {expression}")
+        parts.append(matched.strip())
+        position += len(matched)
+    return parts
+
+
 def evaluate_rule(expression: str, data: pd.DataFrame) -> pd.Series:
     """Evaluate a confirmed simple rule expression without Python eval."""
     if not isinstance(expression, str) or not expression.strip():
         raise RuleParseError("rule expression is empty")
-    if re.search(r"__|import|exec|eval|lambda|;|\|{2}|&{2}", expression, flags=re.IGNORECASE):
+    if re.search(r"__|import|exec|eval|lambda|;|\|{2}|&{2}|\(|\)|\s+or\s+", expression, flags=re.IGNORECASE):
         raise RuleParseError("rule expression contains forbidden syntax")
-    if re.search(r"\s+between\s+", expression, flags=re.IGNORECASE):
-        parts = [expression]
-    else:
-        parts = re.split(r"\s+and\s+", expression, flags=re.IGNORECASE)
+    parts = _split_and_conditions(expression)
     result = pd.Series(True, index=data.index)
     for part in parts:
         result = result & _evaluate_atomic(part, data).reindex(data.index, fill_value=False)

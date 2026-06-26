@@ -7,7 +7,7 @@
     "top_n": {"type": "integer", "minimum": 1},
     "rank_by": {"const": "lift_desc"},
     "execution_mode": {"const": "sequential_reject"},
-    "tie_policy": {"type": "string", "minLength": 1}
+    "tie_policy": {"enum": ["higher_coverage_first", "lower_coverage_first", "input_order", "rule_id_asc"]}
   },
   "additionalProperties": true
 }

@@ -86,7 +86,7 @@ def _write_config_receipt(tmp_dir: Path, run_dir: Path, task_type: str, **extra)
 
 
 class P1CliIntegrationTests(unittest.TestCase):
-    def _prepare_run(self, tmp_dir: Path):
+    def _prepare_stage0(self, tmp_dir: Path):
         run_dir = tmp_dir / "run"
         input_path = tmp_dir / "input.csv"
         data = pd.DataFrame(
@@ -100,9 +100,23 @@ class P1CliIntegrationTests(unittest.TestCase):
             }
         )
         data.to_csv(input_path, index=False, encoding="utf-8-sig")
-        config_path, receipt_path, config, receipt = _write_config_receipt(tmp_dir, run_dir, "rule_mining")
+        config_path, receipt_path, config, receipt = _write_config_receipt(
+            tmp_dir,
+            run_dir,
+            "rule_mining",
+            rule_mining={
+                "numeric_cut_sources": ["quantile:0.5"],
+                "min_hit_count": 1,
+                "min_hit_rate": 0.1,
+            },
+        )
         initialize_run_bundle(run_dir, config, receipt, config_path, receipt_path, input_path)
         write_stage_bundle(run_dir, "00", config, receipt)
+        return run_dir, input_path
+
+    def _prepare_run(self, tmp_dir: Path):
+        run_dir, input_path = self._prepare_stage0(tmp_dir)
+        _, _, config, receipt = _write_config_receipt(tmp_dir, run_dir, "rule_mining")
         write_stage_bundle(
             run_dir,
             "01",
@@ -142,6 +156,96 @@ class P1CliIntegrationTests(unittest.TestCase):
             },
         )
         return run_dir, input_path
+
+    def test_rule_miner_cli_generates_minimal_numeric_candidates(self):
+        with tempfile.TemporaryDirectory() as raw_tmp:
+            tmp_dir = Path(raw_tmp)
+            run_dir, input_path = self._prepare_stage0(tmp_dir)
+            config_path, receipt_path, _, _ = _write_config_receipt(
+                tmp_dir,
+                run_dir,
+                "rule_mining",
+                rule_mining={
+                    "numeric_cut_sources": ["quantile:0.5"],
+                    "min_hit_count": 1,
+                    "min_hit_rate": 0.1,
+                },
+            )
+
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(ROOT / "scripts/rule_miner.py"),
+                    "--config",
+                    str(config_path),
+                    "--confirmation",
+                    str(receipt_path),
+                    "--input",
+                    str(input_path),
+                    "--run-dir",
+                    str(run_dir),
+                ],
+                cwd=ROOT,
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            stage_dir = run_dir / STAGE_SPECS["01"]["directory"]
+            candidates = pd.read_csv(stage_dir / "single_rule_candidates.csv", encoding="utf-8-sig")
+            expressions = set(candidates["rule_expression"])
+            self.assertIn("income >= 1000", expressions)
+            self.assertIn("income < 1000", expressions)
+            income_high = candidates[candidates["rule_expression"] == "income >= 1000"].iloc[0]
+            self.assertEqual(int(income_high["hit_count"]), 2)
+            self.assertEqual(float(income_high["reject_lift"]), 2.0)
+            self.assertEqual(income_high["candidate_status"], "candidate")
+            screening = pd.read_csv(stage_dir / "feature_screening.csv", encoding="utf-8-sig")
+            self.assertIn("monotonicity", screening.columns)
+            inventory = json.loads((stage_dir / "artifact_inventory.json").read_text(encoding="utf-8"))
+            bin_entry = next(item for item in inventory["artifacts"] if item["artifact_name"] == "bin_iv_detail.csv")
+            self.assertEqual(bin_entry["status"], "not_available")
+
+    def test_rule_miner_cli_succeeds_with_no_confirmed_cut_sources(self):
+        with tempfile.TemporaryDirectory() as raw_tmp:
+            tmp_dir = Path(raw_tmp)
+            run_dir, input_path = self._prepare_stage0(tmp_dir)
+            config_path, receipt_path, _, _ = _write_config_receipt(
+                tmp_dir,
+                run_dir,
+                "rule_mining",
+                rule_mining={
+                    "numeric_cut_sources": [],
+                    "min_hit_count": 1,
+                    "min_hit_rate": 0.1,
+                },
+            )
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(ROOT / "scripts/rule_miner.py"),
+                    "--config",
+                    str(config_path),
+                    "--confirmation",
+                    str(receipt_path),
+                    "--input",
+                    str(input_path),
+                    "--run-dir",
+                    str(run_dir),
+                ],
+                cwd=ROOT,
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            stage_dir = run_dir / STAGE_SPECS["01"]["directory"]
+            candidates = pd.read_csv(stage_dir / "single_rule_candidates.csv", encoding="utf-8-sig")
+            self.assertTrue(candidates.empty)
+            inventory = json.loads((stage_dir / "artifact_inventory.json").read_text(encoding="utf-8"))
+            entry = next(item for item in inventory["artifacts"] if item["artifact_name"] == "single_rule_candidates.csv")
+            self.assertEqual(entry["status"], "not_available")
 
     def test_rule_combiner_cli_writes_ranked_cascade_and_overlap(self):
         with tempfile.TemporaryDirectory() as raw_tmp:
@@ -188,6 +292,166 @@ class P1CliIntegrationTests(unittest.TestCase):
             self.assertEqual(funnel["remaining_pass_count"].tolist(), [2, 1])
             self.assertEqual(len(overlap), 1)
             self.assertEqual(int(overlap.iloc[0]["overlap_count"]), 1)
+
+    def test_rule_combiner_respects_confirmed_tie_policy(self):
+        for tie_policy, expected in {
+            "higher_coverage_first": ["R_wide", "R_narrow"],
+            "input_order": ["R_narrow", "R_wide"],
+            "rule_id_asc": ["R_narrow", "R_wide"],
+        }.items():
+            with self.subTest(tie_policy=tie_policy):
+                with tempfile.TemporaryDirectory() as raw_tmp:
+                    tmp_dir = Path(raw_tmp)
+                    run_dir, input_path = self._prepare_stage0(tmp_dir)
+                    _, _, config, receipt = _write_config_receipt(tmp_dir, run_dir, "rule_mining")
+                    write_stage_bundle(
+                        run_dir,
+                        "01",
+                        config,
+                        receipt,
+                        artifact_rows={
+                            "single_rule_candidates.csv": [
+                                {
+                                    "rule_id": "R_narrow",
+                                    "feature_name": "income",
+                                    "rule_expression": "income >= 1000",
+                                    "hit_count": 2,
+                                    "coverage_rate": 0.5,
+                                    "reject_rate": 1.0,
+                                    "non_hit_reject_rate": 0.0,
+                                    "reject_lift": 2.0,
+                                    "reject_capture_rate": 1.0,
+                                    "pass_injury_rate": 0.0,
+                                    "candidate_status": "candidate",
+                                    "stability_status": "未评估（未做时间外验证）",
+                                },
+                                {
+                                    "rule_id": "R_wide",
+                                    "feature_name": "income",
+                                    "rule_expression": "income >= 700",
+                                    "hit_count": 4,
+                                    "coverage_rate": 1.0,
+                                    "reject_rate": 0.5,
+                                    "non_hit_reject_rate": None,
+                                    "reject_lift": 2.0,
+                                    "reject_capture_rate": 1.0,
+                                    "pass_injury_rate": 1.0,
+                                    "candidate_status": "candidate",
+                                    "stability_status": "未评估（未做时间外验证）",
+                                },
+                            ]
+                        },
+                    )
+                    config_path, receipt_path, _, _ = _write_config_receipt(
+                        tmp_dir,
+                        run_dir,
+                        "rule_combination",
+                        rule_combination={
+                            "top_n": 2,
+                            "rank_by": "lift_desc",
+                            "execution_mode": "sequential_reject",
+                            "tie_policy": tie_policy,
+                        },
+                    )
+                    result = subprocess.run(
+                        [
+                            sys.executable,
+                            str(ROOT / "scripts/rule_combiner.py"),
+                            "--config",
+                            str(config_path),
+                            "--confirmation",
+                            str(receipt_path),
+                            "--input",
+                            str(input_path),
+                            "--run-dir",
+                            str(run_dir),
+                        ],
+                        cwd=ROOT,
+                        text=True,
+                        capture_output=True,
+                        check=False,
+                    )
+                    self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+                    ranked = pd.read_csv(
+                        run_dir / STAGE_SPECS["02"]["directory"] / "lift_ranked_rules.csv",
+                        encoding="utf-8-sig",
+                    )
+                    self.assertEqual(ranked["rule_id"].tolist(), expected)
+
+    def test_rule_combiner_rejects_unconfirmed_tie_policy_for_lift_ties(self):
+        with tempfile.TemporaryDirectory() as raw_tmp:
+            tmp_dir = Path(raw_tmp)
+            run_dir, input_path = self._prepare_stage0(tmp_dir)
+            _, _, config, receipt = _write_config_receipt(tmp_dir, run_dir, "rule_mining")
+            write_stage_bundle(
+                run_dir,
+                "01",
+                config,
+                receipt,
+                artifact_rows={
+                    "single_rule_candidates.csv": [
+                        {
+                            "rule_id": "R1",
+                            "feature_name": "income",
+                            "rule_expression": "income >= 1000",
+                            "hit_count": 2,
+                            "coverage_rate": 0.5,
+                            "reject_rate": 1.0,
+                            "non_hit_reject_rate": 0.0,
+                            "reject_lift": 2.0,
+                            "reject_capture_rate": 1.0,
+                            "pass_injury_rate": 0.0,
+                            "candidate_status": "candidate",
+                            "stability_status": "未评估（未做时间外验证）",
+                        },
+                        {
+                            "rule_id": "R2",
+                            "feature_name": "age",
+                            "rule_expression": "age >= 30",
+                            "hit_count": 2,
+                            "coverage_rate": 0.5,
+                            "reject_rate": 1.0,
+                            "non_hit_reject_rate": 0.0,
+                            "reject_lift": 2.0,
+                            "reject_capture_rate": 1.0,
+                            "pass_injury_rate": 0.0,
+                            "candidate_status": "candidate",
+                            "stability_status": "未评估（未做时间外验证）",
+                        },
+                    ]
+                },
+            )
+            config_path, receipt_path, _, _ = _write_config_receipt(
+                tmp_dir,
+                run_dir,
+                "rule_combination",
+                rule_combination={
+                    "top_n": 2,
+                    "rank_by": "lift_desc",
+                    "execution_mode": "sequential_reject",
+                    "tie_policy": "unsupported",
+                },
+            )
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(ROOT / "scripts/rule_combiner.py"),
+                    "--config",
+                    str(config_path),
+                    "--confirmation",
+                    str(receipt_path),
+                    "--input",
+                    str(input_path),
+                    "--run-dir",
+                    str(run_dir),
+                ],
+                cwd=ROOT,
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+            self.assertEqual(result.returncode, 2)
+            self.assertIn("tie_policy", result.stdout)
 
     def test_strategy_evaluator_cli_writes_swap_matrix(self):
         with tempfile.TemporaryDirectory() as raw_tmp:
