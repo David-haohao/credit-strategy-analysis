@@ -13,11 +13,23 @@
 </head>
 <body>
   <h1>{{ title }}</h1>
-  <p class="note"><strong>报告范围：</strong>{{ scope }}<br><strong>限制：</strong>本报告只读取已登记、哈希校验通过的阶段聚合产物；不读取原始数据、不重算规则或策略指标。若产物状态为“未适用”或“不可用”，不将其解释为风险结论。</p>
+  <p class="note"><strong>报告范围：</strong>{{ scope }}<br><strong>限制：</strong>本报告只读取已登记、哈希校验通过的阶段聚合产物；不读取原始数据、不重算规则或策略指标。若产物状态为“未适用”或“不可用”，不将其解释为风险结论。直接观测、估计、不可观测结果必须分开展示。</p>
+
+  <section id="chapters">
+    <h2>固定报告章节</h2>
+    <table>
+      <thead><tr><th>章节</th><th>展示原则</th></tr></thead>
+      <tbody>
+      {% for chapter_id, chapter_title in chapters.items() %}
+        <tr><td>{{ chapter_title }}</td><td>仅展示阶段 00-03 已登记且哈希一致的聚合指标；缺失来源时显示“未提供/不可用”，不在报告阶段补算。</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </section>
 
   {% for stage_id, section_title in sections.items() %}
   <section id="stage-{{ stage_id }}">
-    <h2>{{ stage_id }} · {{ section_title }}</h2>
+    <h2>来源索引 · {{ stage_id }} · {{ section_title }}</h2>
     <table>
       <thead><tr><th>产物</th><th>状态</th><th>固定路径</th><th>SHA-256</th><th>限制/原因</th></tr></thead>
       <tbody>

@@ -7,6 +7,7 @@ import unittest
 from pathlib import Path
 
 import pandas as pd
+from openpyxl import load_workbook
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
@@ -65,7 +66,7 @@ class OutputContractTests(unittest.TestCase):
         return config, input_path
 
     def test_stage_output_contract_declares_fixed_files_and_columns(self):
-        self.assertEqual("1.1", OUTPUT_CONTRACT_VERSION)
+        self.assertEqual("1.2", OUTPUT_CONTRACT_VERSION)
         expected = {
             "00": {
                 "directory": "00_data_contract",
@@ -115,6 +116,7 @@ class OutputContractTests(unittest.TestCase):
                 "upstreams": ["00", "01", "02", "03"],
                 "artifacts": {
                     "final_report.html": None,
+                    "final_report.xlsx": None,
                     "report_source_index.csv": ["section_id", "stage_id", "artifact_name", "relative_path", "sha256", "artifact_status", "limitation"],
                     "report_validation.csv": ["check_name", "status", "details"],
                 },
@@ -283,11 +285,49 @@ class OutputContractTests(unittest.TestCase):
             report_dir = root / STAGE_SPECS["04"]["directory"]
             self.assertEqual(report_path, report_dir / "final_report.html")
             self.assertIn("固定产物测试报告", report_path.read_text(encoding="utf-8"))
+            self.assertIn("直接观测、估计、不可观测", report_path.read_text(encoding="utf-8"))
+            workbook_path = report_dir / "final_report.xlsx"
+            self.assertTrue(workbook_path.is_file())
+            workbook = load_workbook(workbook_path, read_only=True)
+            try:
+                self.assertEqual(
+                    workbook.sheetnames,
+                    [
+                        "01_报告摘要",
+                        "02_数据口径",
+                        "03_特征筛选",
+                        "04_分箱明细",
+                        "05_单规则候选",
+                        "06_Lift排序",
+                        "07_级联漏斗",
+                        "08_规则重叠",
+                        "09_策略效果",
+                        "10_Swap矩阵",
+                        "11_风险披露",
+                    ],
+                )
+            finally:
+                workbook.close()
             source_index = pd.read_csv(
                 report_dir / "report_source_index.csv", encoding="utf-8-sig", dtype={"stage_id": str}
             )
             self.assertEqual(set(source_index["stage_id"]), {"00", "01", "02", "03"})
             self.assertTrue((report_dir / "report_validation.csv").is_file())
+            inventory = json.loads((report_dir / "artifact_inventory.json").read_text(encoding="utf-8"))
+            entries = {entry["artifact_name"]: entry for entry in inventory["artifacts"]}
+            self.assertEqual(entries["final_report.xlsx"]["status"], "generated")
+            self.assertTrue(entries["final_report.xlsx"]["relative_path"].startswith("04_final_report/"))
+            self.assertRegex(entries["final_report.xlsx"]["sha256"], r"^[a-f0-9]{64}$")
+
+    def test_stage_04_requires_registered_xlsx_binary_artifact(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            root = Path(tmp_dir) / "run"
+            config, _ = self._initialize(root)
+            for stage_id in ("00", "01", "02", "03"):
+                write_stage_bundle(root, stage_id, config, self.receipt)
+
+            with self.assertRaisesRegex(OutputContractError, "final_report.xlsx"):
+                write_stage_bundle(root, "04", config, self.receipt)
 
 
 if __name__ == "__main__":

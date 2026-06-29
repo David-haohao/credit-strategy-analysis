@@ -10,21 +10,21 @@
 
 - 已确认的 UTF-8 配置、确认凭证和原始输入文件；原始输入只记录路径与 SHA-256，不复制到运行目录。
 - 阶段 0 的输入契约校验；阶段 1 至 4 还必须存在已校验的前序阶段目录包。
-- 配置中的 `output.directory`、显式 `--run-dir`、产物契约版本 `1.1`。
+- 配置中的 `output.directory`、显式 `--run-dir`、产物契约版本 `1.2`。
 
 ## 方法步骤
 
 1. 阶段 0 在根目录写入 `input_config.yaml`、`confirmation_receipt.json`、`run_manifest.json` 和 `source_fingerprint.json`。
 2. 每一阶段写入固定子目录，并写入 `stage_manifest.json` 与 `artifact_inventory.json`。
 3. inventory 逐项记录路径、状态、行数、字段、SHA-256、报告可用性及原因；manifest 记录参数、输入/上游哈希、依赖版本、门禁、警告与限制。
-4. HTML 仅读取阶段 00 至 03 的 manifest 和 inventory 所登记、且哈希一致的聚合产物；不扫描目录、不读取原始数据、不重新计算指标。
+4. HTML/XLSX 报告仅读取阶段 00 至 03 的 manifest 和 inventory 所登记、且哈希一致的聚合产物；不扫描目录、不读取原始数据、不重新计算指标。
 5. 已存在阶段默认阻断覆盖；只有 `resume` 且配置、确认凭证、输入指纹和上游哈希均一致时，才允许复用。
 
 ## 候选参数
 
 | 参数 | 固定规则 |
 |---|---|
-| `output_contract_version` | `1.1`；产物名、最小字段或语义变化必须升版本。 |
+| `output_contract_version` | `1.2`；产物名、最小字段或语义变化必须升版本。 |
 | `--run-dir` | 必填、显式、不可使用隐式时间戳目录。 |
 | `artifact_status` | 仅 `generated`、`not_applicable`、`not_available`、`failed`。 |
 | `resume` | 默认 `false`；仅在四类哈希均一致时有效。 |
@@ -47,7 +47,7 @@ assert sha256(upstream_manifest) == stage_manifest["upstream_stage_manifest_sha2
 | `01_rule_mining` | `feature_screening.csv`、`bin_iv_detail.csv`、`single_rule_candidates.csv`、`cart_path_candidates.csv`、`rule_stability.csv` |
 | `02_rule_combination` | `lift_ranked_rules.csv`、`selected_rule_set.csv`、`cascade_funnel.csv`、`rule_overlap.csv`、`cascade_oot.csv` |
 | `03_strategy_evaluation` | `strategy_effect_summary.csv`、`strategy_layer_effect.csv`、`swap_summary.csv`、`swap_segment_detail.csv`、`swap_in_risk_estimate.csv`、`swap_in_coverage.csv` |
-| `04_final_report` | `final_report.html`、`report_source_index.csv`、`report_validation.csv` |
+| `04_final_report` | `final_report.html`、`final_report.xlsx`、`report_source_index.csv`、`report_validation.csv` |
 
 所有固定 CSV 均写 UTF-8 表头。无 OOT 时 `rule_stability.csv`、`cascade_oot.csv` 标注“未评估（未做时间外验证）”；无成熟表现或第三方分时 Swap-in 风险估计明确标为不可观测或不可估计，不得用旧决策字段、审批结果字段或代理标签替代真实坏账标签。
 
@@ -63,5 +63,5 @@ assert sha256(upstream_manifest) == stage_manifest["upstream_stage_manifest_sha2
 
 - 每阶段有且只有契约声明的业务产物，并同时具备 `stage_manifest.json`、`artifact_inventory.json`。
 - 所有可报告产物均可从 `report_source_index.csv` 回溯到路径和 SHA-256。
-- `final_report.html` 自包含，不依赖未登记的目录扫描、原始数据或外部图表文件。
+- `final_report.html` 自包含，`final_report.xlsx` 固定 11 个 Sheet；二者均不依赖未登记的目录扫描、原始数据或外部图表文件。
 - 任何产物内容、字段或语义变化必须通过新测试并提升 `output_contract_version`。

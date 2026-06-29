@@ -100,7 +100,7 @@ input:
 
 output:
   directory: null                 # 必须与 --run-dir 解析后的绝对路径一致
-  output_contract_version: "1.1"
+  output_contract_version: "1.2"
   write_detail: true
   write_summary: true
   write_manifest: true

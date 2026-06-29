@@ -4,7 +4,7 @@
   "type": "object",
   "required": ["output_contract_version", "stage_id", "artifacts"],
   "properties": {
-    "output_contract_version": {"const": "1.1"},
+    "output_contract_version": {"const": "1.2"},
     "stage_id": {"type": "string", "enum": ["00", "01", "02", "03", "04"]},
     "artifacts": {
       "type": "array",

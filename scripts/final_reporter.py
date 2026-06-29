@@ -3,10 +3,13 @@
 from __future__ import annotations
 
 import argparse
+from io import BytesIO
 from pathlib import Path
 from typing import Any, Mapping
 
 import pandas as pd
+from openpyxl import Workbook
+from openpyxl.styles import Font, PatternFill
 
 try:
     from scripts.utils.contracts import ContractValidationError, load_confirmation_receipt, load_yaml
@@ -23,6 +26,44 @@ REPORT_SECTIONS = {
     "01": "规则挖掘",
     "02": "规则组合",
     "03": "策略效果与 Swap",
+}
+
+HTML_CHAPTERS = {
+    "overview": "分析概要",
+    "data_contract": "数据与口径",
+    "rule_mining": "单规则挖掘",
+    "rule_combination": "规则组合策略",
+    "strategy_swap": "策略效果与 Swap",
+    "risk_disclosure": "风险披露",
+}
+
+XLSX_SHEETS = [
+    "01_报告摘要",
+    "02_数据口径",
+    "03_特征筛选",
+    "04_分箱明细",
+    "05_单规则候选",
+    "06_Lift排序",
+    "07_级联漏斗",
+    "08_规则重叠",
+    "09_策略效果",
+    "10_Swap矩阵",
+    "11_风险披露",
+]
+
+
+SHEET_STAGE_MAP = {
+    "01_报告摘要": {"00", "01", "02", "03"},
+    "02_数据口径": {"00"},
+    "03_特征筛选": {"01"},
+    "04_分箱明细": {"01"},
+    "05_单规则候选": {"01", "02"},
+    "06_Lift排序": {"02"},
+    "07_级联漏斗": {"02"},
+    "08_规则重叠": {"02"},
+    "09_策略效果": {"03"},
+    "10_Swap矩阵": {"03"},
+    "11_风险披露": {"00", "01", "02", "03"},
 }
 
 
@@ -54,11 +95,55 @@ def _source_rows(run_dir: str | Path) -> tuple[list[dict[str, Any]], list[dict[s
     return rows, validations
 
 
+def _write_table(ws, start_row: int, headers: list[str], rows: list[Mapping[str, Any]]) -> None:
+    fill = PatternFill("solid", fgColor="F4F7FA")
+    for col, header in enumerate(headers, start=1):
+        cell = ws.cell(row=start_row, column=col, value=header)
+        cell.font = Font(bold=True)
+        cell.fill = fill
+    for row_offset, row in enumerate(rows, start=start_row + 1):
+        for col, header in enumerate(headers, start=1):
+            ws.cell(row=row_offset, column=col, value=row.get(header))
+    for column_cells in ws.columns:
+        length = max(len(str(cell.value or "")) for cell in column_cells)
+        ws.column_dimensions[column_cells[0].column_letter].width = min(max(length + 2, 10), 48)
+
+
+def _build_xlsx_report(title: str, scope: str, source_rows: list[dict[str, Any]], validations: list[dict[str, str]]) -> bytes:
+    """Build the fixed 11-sheet workbook from registered artifact metadata only."""
+    workbook = Workbook()
+    default = workbook.active
+    workbook.remove(default)
+    headers = ["artifact_name", "artifact_status", "relative_path", "sha256", "limitation"]
+    validation_headers = ["check_name", "status", "details"]
+    for sheet_name in XLSX_SHEETS:
+        ws = workbook.create_sheet(sheet_name)
+        ws["A1"] = title
+        ws["A1"].font = Font(bold=True, size=14)
+        ws["A2"] = f"报告范围：{scope}"
+        ws["A3"] = "说明：本工作簿只消费阶段 00-03 已登记且哈希一致的聚合产物；不读取原始数据、不重算指标。"
+        ws["A4"] = "观测类型：直接观测、估计、不可观测必须分开展示；缺失指标显示为未提供/不可用。"
+        stage_ids = SHEET_STAGE_MAP[sheet_name]
+        rows = [
+            {key: row.get(key) for key in headers}
+            for row in source_rows
+            if row.get("stage_id") in stage_ids
+        ]
+        _write_table(ws, 6, headers, rows)
+        if sheet_name == "11_风险披露":
+            start = 8 + len(rows)
+            _write_table(ws, start, validation_headers, validations)
+    output = BytesIO()
+    workbook.save(output)
+    return output.getvalue()
+
+
 def build_final_report(run_dir: str | Path, config: Mapping[str, Any], receipt: Mapping[str, Any]) -> Path:
     """Build stage 04 from registered artifacts, without reading raw source data."""
     source_rows, validations = _source_rows(run_dir)
     title = str(config.get("final_report", {}).get("title") or "信用策略分析报告")
     scope = str(config.get("final_report", {}).get("report_scope") or "以已校验阶段产物为准")
+    xlsx_content = _build_xlsx_report(title, scope, source_rows, validations)
     html = render_template(
         Path(__file__).resolve().parents[1] / "templates",
         "final_report.html.j2",
@@ -68,6 +153,7 @@ def build_final_report(run_dir: str | Path, config: Mapping[str, Any], receipt: 
             "source_rows": source_rows,
             "validations": validations,
             "sections": REPORT_SECTIONS,
+            "chapters": HTML_CHAPTERS,
         },
     )
     write_stage_bundle(
@@ -79,6 +165,7 @@ def build_final_report(run_dir: str | Path, config: Mapping[str, Any], receipt: 
             "report_source_index.csv": source_rows,
             "report_validation.csv": validations,
         },
+        binary_artifacts={"final_report.xlsx": xlsx_content},
         limitations=["报告仅汇总已登记且哈希校验通过的聚合产物；不重新计算指标。"],
         html_content=html,
     )

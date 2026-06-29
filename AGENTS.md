@@ -12,7 +12,7 @@
 
 - `SKILL.md` 保持精简，只写触发后的运行说明、阶段入口和必要边界。
 - 详细流程写入 `references/`，可复用逻辑写入 `scripts/`，schema 写入 `schemas/`，报告模板写入 `templates/`。
-- HTML 报告器只能读取已登记且哈希一致的阶段产物，不得扫描目录、读取原始数据或重算上游指标。
+- HTML/XLSX 报告器只能读取已登记且哈希一致的阶段产物，不得扫描目录、读取原始数据或重算上游指标。
 - 不输出客户明细、原始 JSON、敏感原值；具体敏感/保护字段由 `analysis_grain.id_cols`、`columns.id_cols`、`feature_policy.protected_columns`、`feature_policy.exclude_features` 和 `feature_policy.excluded_name_tokens` 声明。
 
 ## 同步到 Codex 安装目录

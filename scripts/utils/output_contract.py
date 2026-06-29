@@ -14,7 +14,7 @@ from typing import Any, Mapping
 import pandas as pd
 
 
-OUTPUT_CONTRACT_VERSION = "1.1"
+OUTPUT_CONTRACT_VERSION = "1.2"
 
 
 class OutputContractError(ValueError):
@@ -70,6 +70,7 @@ STAGE_SPECS: dict[str, dict[str, Any]] = {
         "upstreams": ["00", "01", "02", "03"],
         "artifacts": {
             "final_report.html": None,
+            "final_report.xlsx": None,
             "report_source_index.csv": ["section_id", "stage_id", "artifact_name", "relative_path", "sha256", "artifact_status", "limitation"],
             "report_validation.csv": ["check_name", "status", "details"],
         },
@@ -356,6 +357,7 @@ def write_stage_bundle(
     quality_gates: Mapping[str, str] | None = None,
     resume: bool = False,
     html_content: str | None = None,
+    binary_artifacts: Mapping[str, bytes] | None = None,
 ) -> dict[str, Any]:
     """Write one fixed stage directory, or safely resume an identical one."""
     root, run_manifest, _ = _load_run_manifest(run_dir)
@@ -375,8 +377,9 @@ def write_stage_bundle(
         return existing
 
     rows = dict(artifact_rows or {})
+    binaries = dict(binary_artifacts or {})
     statuses = dict(artifact_statuses or {})
-    unknown = sorted(set(rows) - set(spec["artifacts"]))
+    unknown = sorted((set(rows) | set(binaries)) - set(spec["artifacts"]))
     if unknown:
         raise OutputContractError(f"unknown or escaped artifact path: {', '.join(unknown)}")
     frames: dict[str, pd.DataFrame] = {}
@@ -385,6 +388,8 @@ def write_stage_bundle(
             frames[name] = _empty_or_rows(rows.get(name), columns, name, config)
     if html_content is not None and stage_id != "04":
         raise OutputContractError("HTML content is only allowed for stage 04")
+    if binaries and stage_id != "04":
+        raise OutputContractError("binary report artifacts are only allowed for stage 04")
 
     upstream_hashes: dict[str, str] = {}
     for upstream in spec["upstreams"]:
@@ -397,7 +402,12 @@ def write_stage_bundle(
         target = directory / name
         _assert_within(target, directory)
         if columns is None:
-            target.write_text(html_content or "<!doctype html><html lang=\"zh-CN\"><meta charset=\"utf-8\"><title>待生成报告</title></html>", encoding="utf-8")
+            if name in binaries:
+                target.write_bytes(binaries[name])
+            elif target.suffix.lower() == ".html":
+                target.write_text(html_content or "<!doctype html><html lang=\"zh-CN\"><meta charset=\"utf-8\"><title>待生成报告</title></html>", encoding="utf-8")
+            else:
+                raise OutputContractError(f"missing binary content for report artifact: {name}")
             row_count = None
         else:
             frames[name].to_csv(target, index=False, encoding="utf-8-sig")
